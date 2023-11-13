@@ -1,0 +1,6 @@
+[
+{
+  "name":"sun.net.dns.ResolverConfigurationImpl",
+  "fields":[{"name":"os_nameservers"}, {"name":"os_searchlist"}]
+}
+]

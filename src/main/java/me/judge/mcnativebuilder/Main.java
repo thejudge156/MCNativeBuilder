@@ -9,6 +9,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.List;
 
 public class Main {
     public static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
@@ -77,13 +78,49 @@ public class Main {
 
         ProcessBuilder builder = new ProcessBuilder();
         builder.command(System.getenv("GRAALVM_HOME") + "/bin/native-image.cmd", "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
-                "-H:ConfigurationFileDirectories=../configs/" + args[0], "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libsBuilder.toString(), "net.minecraft.client.main.Main", args[0]);
-        System.out.println(builder.command());
+                "-H:ConfigurationFileDirectories=../configs/default,../configs/" + args[0], "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libsBuilder.toString(), "net.minecraft.client.main.Main", args[0]);
         builder.directory(buildDir);
+
+        boolean compilePGOs = false;
+        if(args.length > 1) {
+            compilePGOs = Boolean.parseBoolean(args[1]);
+            if(compilePGOs) {
+                List<String> commands = builder.command();
+                commands.add(builder.command().size() - 4, "--pgo-instrument");
+                builder.command(commands);
+            }
+        }
+
+        System.out.println(builder.command());
         Process process = builder.start();
 
         while(process.isAlive()) {
             System.out.println(process.inputReader().readLine());
+        }
+
+        if(compilePGOs) {
+            // Load MC to generate IPROF file
+            builder = new ProcessBuilder();
+            builder.command("./native-build/" + args[0] + ".exe", "--accessToken",
+                    "eyJraWQiOiJhYzg0YSIsImFsZyI6IkhTMjU2In0.eyJ4dWlkIjoiMjUzNTQ0NjkxNDIzMjM2NSIsImFnZyI6IkFkdWx0Iiwic3ViIjoiN2M2NGI0MzMtYWUwOC00ZGQ3LWE2NzMtZTc3MzYzNDk4OWRlIiwiYXV0aCI6IlhCT1giLCJucyI6ImRlZmF1bHQiLCJyb2xlcyI6W10sImlzcyI6ImF1dGhlbnRpY2F0aW9uIiwiZmxhZ3MiOlsidHdvZmFjdG9yYXV0aCIsIm1pbmVjcmFmdF9uZXQiLCJtc2FtaWdyYXRpb25fc3RhZ2U0Iiwib3JkZXJzXzIwMjIiXSwicHJvZmlsZXMiOnsibWMiOiJiZDE4M2I3Ny04YjE1LTRiNjgtOGE2ZS0xOTY3MmI3NGJkYjUifSwicGxhdGZvcm0iOiJVTktOT1dOIiwieXVpZCI6ImZlZDA1N2RmNGFkMDQwY2FhOTU0MWU3MTIyMTljODcyIiwibmJmIjoxNjk5ODM2MTY2LCJleHAiOjE2OTk5MjI1NjYsImlhdCI6MTY5OTgzNjE2Nn0.1mISkPIOzj9d0y9n-82TK-MVLbHb9mXxJWsitmkPByI", "--assetIndex", "8", "--username", "TheJudge156", "--uuid", "bd183b778b154b688a6e19672b74bdb5", "--version", "MCNative");
+            builder.directory(new File("./install"));
+            process = builder.start();
+
+            System.out.println("Generate a world, then join a server afterwards. It might take a while.");
+            while(process.isAlive()) {
+                System.out.println(process.errorReader().readLine());
+            }
+
+            builder = new ProcessBuilder();
+            builder.command(System.getenv("GRAALVM_HOME") + "/bin/native-image.cmd", "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
+                    "-H:ConfigurationFileDirectories=../configs/default,../configs/" + args[0], "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "--pgo=../install/default.iprof", "-cp", libsBuilder.toString(), "net.minecraft.client.main.Main", args[0]);
+            System.out.println(builder.command());
+            builder.directory(buildDir);
+            process = builder.start();
+
+            while(process.isAlive()) {
+                System.out.println(process.inputReader().readLine());
+            }
         }
     }
 }
