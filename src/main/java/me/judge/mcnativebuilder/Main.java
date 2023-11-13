@@ -102,7 +102,7 @@ public class Main {
             // Load MC to generate IPROF file
             builder = new ProcessBuilder();
             builder.command("./native-build/" + args[0] + ".exe", "--accessToken",
-                    "eyJraWQiOiJhYzg0YSIsImFsZyI6IkhTMjU2In0.eyJ4dWlkIjoiMjUzNTQ0NjkxNDIzMjM2NSIsImFnZyI6IkFkdWx0Iiwic3ViIjoiN2M2NGI0MzMtYWUwOC00ZGQ3LWE2NzMtZTc3MzYzNDk4OWRlIiwiYXV0aCI6IlhCT1giLCJucyI6ImRlZmF1bHQiLCJyb2xlcyI6W10sImlzcyI6ImF1dGhlbnRpY2F0aW9uIiwiZmxhZ3MiOlsidHdvZmFjdG9yYXV0aCIsIm1pbmVjcmFmdF9uZXQiLCJtc2FtaWdyYXRpb25fc3RhZ2U0Iiwib3JkZXJzXzIwMjIiXSwicHJvZmlsZXMiOnsibWMiOiJiZDE4M2I3Ny04YjE1LTRiNjgtOGE2ZS0xOTY3MmI3NGJkYjUifSwicGxhdGZvcm0iOiJVTktOT1dOIiwieXVpZCI6ImZlZDA1N2RmNGFkMDQwY2FhOTU0MWU3MTIyMTljODcyIiwibmJmIjoxNjk5ODM2MTY2LCJleHAiOjE2OTk5MjI1NjYsImlhdCI6MTY5OTgzNjE2Nn0.1mISkPIOzj9d0y9n-82TK-MVLbHb9mXxJWsitmkPByI", "--assetIndex", "8", "--username", "TheJudge156", "--uuid", "bd183b778b154b688a6e19672b74bdb5", "--version", "MCNative");
+                    "nuh-uh", "--assetIndex", "8", "--username", "TheJudge156", "--uuid", "bd183b778b154b688a6e19672b74bdb5", "--version", "MCNative");
             builder.directory(new File("./install"));
             process = builder.start();
 
