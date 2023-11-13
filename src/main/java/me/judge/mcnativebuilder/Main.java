@@ -70,7 +70,7 @@ public class Main {
 
         MinecraftJavaRuntimeSetup.launch(settings, false, new File(System.getenv("GRAALVM_HOME") + "/bin/javaw.exe"));
         System.out.println("Waiting for Minecraft to close...");
-        System.out.println("Run every configuration at least once.");
+        System.out.println("Generate a world, go to the end, leave, and join a server at least once.");
         MinecraftLauncher.launch(settings, "-agentlib:native-image-agent=config-merge-dir=../configs/" + args[0]);
 
         File buildDir = new File("./native-build");
