@@ -7,10 +7,32 @@ Very in alpha, expect bugs and major changes!
 ### Building native images of Minecraft is usally an annoying, time consuming, and complex process that requires not only a lot of knowledge of the JVM, but also Minecraft itself. This tool is meant to allow for quick and easy building of native Minecraft images without much work on the end users side.
 
 ## How do you use it?
-### Go to the releases page and download the latest build then run ```java -jar <downloadedJarPath> -<minecraftVersion>``` (eg. 1.20.2) inside of Command Prompt/Terminal.
+### Download the Latest Build:
+* Go to the [releases page](https://github.com/thejudge156/MCNativeBuilder/releases)
+* Download the latest release (the MCNativeBuilder.jar file).
+* Place the jar file inside of a folder named ``MCNativeBuilder``
+
+### Run the Downloaded Build:
+* Open Command Prompt or Terminal.
+* Type the command: ``java -jar path-to-downloaded-jar -minecraft-version``.
+* Example: ``java -jar C:/Downloads/MCNativeBuilder/MCNativeBuilder.jar -1.20.2``.
 
 ## How do you run the game?
-### After the image has finished building, go to the ```native-build``` folder and find the executable for the version you built (eg. 1.20.2.exe), now open Command Prompt/Terminal where that executable is and run ```1.20.2.exe (or the version you built) --accessToken <accessToken> --assetIndex 8 --username <username> --uuid <uuid> --version MCNative```
+### Locate the Executable:
+* After the build is complete, navigate to the ``native-build folder``.
+* Find the executable file for your version (e.g., ``1.20.2.exe``).
 
-## So you're getting errors?
-### 1. Make sure that when you run your commnds, you remove the ```(text)``` and replace the ```<text>``` blocks with the information you want. For instance, if it says ```<username>``` you need to replace that entire line with ```TheJudge156``` or whatever your username is.
+### Run the Game:
+* Open Command Prompt or Terminal at the location of the executable.
+* Type the command: ``your-version.exe --accessToken yourAccessToken --assetIndex 8 --username yourUsername --uuid yourUUID --version MCNative``.
+* Example: ``1.20.2.exe --accessToken abc123 --assetIndex 8 --username TheJudge156 --uuid 12345 --version MCNative.``
+
+## Troubleshooting
+### Replacing Placeholders:
+* When entering commands, ensure to replace placeholder text (e.g., ``<username>``) with your specific information.
+* For instance, replace ``<username>`` with your actual username like ``TheJudge156``.
+
+### Common Errors:
+* Check if the file paths and version numbers are correctly entered.
+* Ensure all placeholders are filled with your specific details.
+
