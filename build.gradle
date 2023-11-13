@@ -1,11 +1,15 @@
 plugins {
     id 'java'
     id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 group = 'me.judge'
 version = '1.0-SNAPSHOT'
-mainClassName = 'me.judge.mcnativebuilder.Main'
+
+application {
+    mainClass = 'me.judge.mcnativebuilder.Main'
+}
 
 repositories {
     maven {
@@ -15,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation "net.hycrafthd:minecraft_downloader:1.1.1"
+    shadow(implementation("net.hycrafthd:minecraft_downloader:1.1.1"))
 
     testImplementation platform('org.junit:junit-bom:5.9.1')
     testImplementation 'org.junit.jupiter:junit-jupiter'
