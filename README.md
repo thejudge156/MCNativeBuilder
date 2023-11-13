@@ -17,7 +17,7 @@ Very in alpha, expect bugs and major changes!
 ### Run the Downloaded Build:
 * Open Command Prompt or Terminal.
 * Download the latest release of GraalVM, and put its root directory in an envvar called ``GRAALVM_HOME``.
-* Type the command: ``java -jar path-to-downloaded-jar -minecraft-version``.
+* Type the command: ``java -jar path-to-downloaded-jar minecraft-version``.
 * Example: ``java -jar C:/Downloads/MCNativeBuilder/MCNativeBuilder.jar 1.20.2``.
 
 ## How do you run the game?
