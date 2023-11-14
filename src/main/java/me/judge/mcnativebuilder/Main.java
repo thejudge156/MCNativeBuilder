@@ -6,9 +6,7 @@ import net.hycrafthd.minecraft_downloader.settings.LauncherVariables;
 import net.hycrafthd.minecraft_downloader.settings.ProvidedSettings;
 import net.hycrafthd.minecraft_downloader.util.FileUtil;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 
@@ -30,27 +28,8 @@ public class Main {
                 continue;
             }
             if(file.getDownloadedFile().getName().contains("lwjgl")) {
-                String newLWJGL;
-                if(file.getDownloadedFile().getName().matches("lwjgl-3.([0-9]).([0-9]).*")) {
-                    if(file.getPath().contains("natives")) {
-                        newLWJGL = file.getDownloadedFile().getName().split("-")[0]
-                                + "/" + file.getDownloadedFile().getName().split("-")[0] +
-                                "-" + file.getDownloadedFile().getName().split("-")[2] + "-" + file.getDownloadedFile().getName().split("-")[3] + (file.getDownloadedFile().getName().split("-")[3].endsWith(".jar") ? "" : ".jar");
-                    } else {
-                        newLWJGL = file.getDownloadedFile().getName().split("-")[0]
-                                + "/" + file.getDownloadedFile().getName().split("-")[0] + ".jar";
-                    }
-                } else if(file.getPath().contains("natives")) {
-                    newLWJGL = file.getDownloadedFile().getName().split("-")[0] + "-" + file.getDownloadedFile().getName().split("-")[1]
-                            + "/" + file.getDownloadedFile().getName().split("-")[0] + "-" + file.getDownloadedFile().getName().split("-")[1] +
-                            "-" + file.getDownloadedFile().getName().split("-")[3] + "-" + file.getDownloadedFile().getName().split("-")[4] + (file.getDownloadedFile().getName().split("-")[4].endsWith(".jar") ? "" : ".jar");
-                } else {
-                    newLWJGL = file.getDownloadedFile().getName().split("-")[0] + "-" + file.getDownloadedFile().getName().split("-")[1]
-                            + "/" + file.getDownloadedFile().getName().split("-")[0] + "-" + file.getDownloadedFile().getName().split("-")[1] + ".jar";
-                }
-
+                String newLWJGL = createLWJGL(file);
                 System.out.printf("Replacing %s with 3.3.3 Version.\n", file.getDownloadedFile().getName());
-
                 FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
             }
 
@@ -61,9 +40,9 @@ public class Main {
                 FileUtil.downloadFile(SLF4J_JDK14, file.getDownloadedFile(), null);
             }
 
-            libsBuilder.append(lib + ";");
+            libsBuilder.append(lib).append(";");
         }
-        libsBuilder.append(System.getProperty("user.dir") + "/libs/JFRSub-1.0-SNAPSHOT.jar;");
+        libsBuilder.append(System.getProperty("user.dir")).append("/libs/JFRSub-1.0-SNAPSHOT.jar;");
         libsBuilder.append(settings.getClientJarFile().getAbsolutePath());
 
         MinecraftClasspathBuilder.launch(settings, false);
@@ -71,11 +50,12 @@ public class Main {
 
         MinecraftJavaRuntimeSetup.launch(settings, false, new File(System.getenv("GRAALVM_HOME") + "/bin/javaw.exe"));
         System.out.println("Waiting for Minecraft to close...");
-        System.out.println("Go to the end, leave, and join a server at least once.");
+        System.out.println("Run every configuration at least once.");
         MinecraftLauncher.launch(settings, "-agentlib:native-image-agent=config-merge-dir=../configs/" + args[0]);
 
         File buildDir = new File("./native-build");
         buildDir.mkdirs();
+
 
         ProcessBuilder builder = new ProcessBuilder();
         builder.command(System.getenv("GRAALVM_HOME") + "/bin/native-image.cmd", "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
@@ -123,5 +103,44 @@ public class Main {
                 System.out.println(process.inputReader().readLine());
             }
         }
+    }
+
+    private static String createLWJGL(DownloadableFile file) {
+        String fileName = file.getDownloadedFile().getName();
+        String[] nameParts = fileName.split("-");
+        String baseName = nameParts[0];
+
+        boolean isNatives = file.getPath().contains("natives");
+        boolean matchesLWJGLPattern = fileName.matches("lwjgl-3\\.([0-9])\\.([0-9]).*");
+
+        if (matchesLWJGLPattern) {
+            if (isNatives) {
+                return formatLWJGLName(baseName, nameParts[2], nameParts[3]);
+            } else {
+                return baseName + "/" + baseName + ".jar";
+            }
+        } else {
+            if (isNatives) {
+                return formatLWJGLName(baseName, nameParts[1], nameParts[3], nameParts[4]);
+            } else {
+                return baseName + "-" + nameParts[1] + "/" + baseName + "-" + nameParts[1] + ".jar";
+            }
+        }
+    }
+
+    private static String formatLWJGLName(String baseName, String... parts) {
+        StringBuilder sb = new StringBuilder(baseName);
+        sb.append("-").append(parts[0]).append("/");
+        sb.append(baseName).append("-").append(parts[0]).append("-");
+        for (int i = 1; i < parts.length; i++) {
+            sb.append(parts[i]);
+            if (i < parts.length - 1) {
+                sb.append("-");
+            }
+        }
+        if (!parts[parts.length - 1].endsWith(".jar")) {
+            sb.append(".jar");
+        }
+        return sb.toString();
     }
 }
