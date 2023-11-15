@@ -21,6 +21,18 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Main {
+    static {
+        if(System.getProperty("os.name").contains("Windows")) {
+            OS_EXT = ".exe";
+            OS_EXT_SHELL = ".cmd";
+        } else {
+            OS_EXT = "";
+            OS_EXT_SHELL = ".sh";
+        }
+    }
+
+    public static String OS_EXT;
+    public static String OS_EXT_SHELL;
     public static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
     private static String version;
     private static Boolean profileGuidedOptimizations;
@@ -134,7 +146,7 @@ public class Main {
         if(profileGuidedOptimizations) {
             // Load MC to generate IPROF file
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("./native-build/" + version + ".exe", "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
+            builder.command("./native-build/" + version + OS_EXT, "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
                     "--assetIndex", settings.getVariable(LauncherVariables.ASSET_INDEX_NAME), "--username", settings.getVariable(LauncherVariables.AUTH_PLAYER_NAME), "--uuid", settings.getVariable(LauncherVariables.AUTH_UUID), "--version", "MCNative");
             builder.directory(new File("./install"));
             process = builder.start();
@@ -153,7 +165,7 @@ public class Main {
 
     private static Process startCompile(String libs, String buildDir, String... extraArgs) throws IOException {
         ProcessBuilder builder = new ProcessBuilder();
-        builder.command(graalvmInstall + "/bin/native-image.cmd", "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
+        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
                 "-H:ConfigurationFileDirectories=../configs/default,../configs/" + version, "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libs, "net.minecraft.client.main.Main", version);
         for(String arg : extraArgs) {
             List<String> commands = builder.command();

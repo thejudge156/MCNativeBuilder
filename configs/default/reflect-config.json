@@ -8,11 +8,5 @@
 {
   "name":"com.mojang.authlib.minecraft.MinecraftProfileTexture$Type",
   "allDeclaredFields":true
-},
-{
-  "name":"com.mojang.authlib.yggdrasil.response.UserAttributesResponse$Privileges$Privilege",
-  "unsafeAllocated": true,
-  "allDeclaredFields":true,
-  "methods":[{"name":"<init>","parameterTypes":[] }]
 }
 ]
