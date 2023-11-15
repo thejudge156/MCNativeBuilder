@@ -1,7 +1,11 @@
 package me.judge.mcnativebuilder.GUI;
 
+import me.judge.mcnativebuilder.Main;
+
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.io.IOException;
 
 public class BuildUI {
     public static void main(String[] args) {
@@ -21,27 +25,49 @@ public class BuildUI {
         gbc.gridy = 0;
         mainPanel.add(fieldPanel, gbc);
 
-        fieldPanel.add(new JLabel("Username"));
-        fieldPanel.add(new JTextField(20));
-
-        fieldPanel.add(Box.createVerticalStrut(10));
+        JTextField token = new JTextField(20);
         fieldPanel.add(new JLabel("Token"));
-        fieldPanel.add(new JTextField(20));
+        fieldPanel.add(token);
 
-        fieldPanel.add(Box.createVerticalStrut(10));
+        JTextField uuid = new JTextField(20);
         fieldPanel.add(new JLabel("UUID"));
-        fieldPanel.add(new JTextField(20));
+        fieldPanel.add(uuid);
 
-        fieldPanel.add(Box.createVerticalStrut(20));
+        JTextField graalVM = new JTextField(20);
+        fieldPanel.add(new JLabel("GraalVM SDK"));
+        fieldPanel.add(graalVM);
+
         String[] versions = {"1.18.2", "1.19.0", "1.19.1", "1.19.2", "1.19.3", "1.19.4", "1.20.0", "1.20.1", "1.20.2"};
         JComboBox<String> versionList = new JComboBox<>(versions);
+        fieldPanel.add(new JLabel("Version"));
         fieldPanel.add(versionList);
 
         fieldPanel.add(Box.createVerticalStrut(20));
         JPanel buttonPanel = new JPanel(new FlowLayout());
-        buttonPanel.add(new JButton("Start build!"));
+        JButton buildButton = new JButton("Start build!");
+        buildButton.setAction(new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    Main.main(new String[] {
+                            "--accessToken",
+                            token.getText(),
+                            "--version",
+                            (String) versionList.getSelectedItem(),
+                            "--uuid",
+                            uuid.getText(),
+                            "--graalvm",
+                            graalVM.getText()
+                    });
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+        });
+
         buttonPanel.add(new JButton("Support Page"));
         fieldPanel.add(buttonPanel);
+        fieldPanel.add(buildButton);
 
         frame.setVisible(true);
     }

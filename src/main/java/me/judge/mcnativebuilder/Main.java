@@ -5,19 +5,62 @@ import net.hycrafthd.minecraft_downloader.library.DownloadableFile;
 import net.hycrafthd.minecraft_downloader.settings.LauncherVariables;
 import net.hycrafthd.minecraft_downloader.settings.ProvidedSettings;
 import net.hycrafthd.minecraft_downloader.util.FileUtil;
+import net.sourceforge.argparse4j.ArgumentParserBuilder;
+import net.sourceforge.argparse4j.ArgumentParsers;
+import net.sourceforge.argparse4j.inf.ArgumentParser;
+import net.sourceforge.argparse4j.inf.ArgumentParserException;
+import net.sourceforge.argparse4j.inf.Namespace;
 
 import java.io.File;
 import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 public class Main {
     public static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
     public static final String SLF4J_JDK14 = "https://repo1.maven.org/maven2/org/slf4j/slf4j-jdk14/2.0.9/slf4j-jdk14-2.0.9.jar";
+    private static String version;
+    private static Boolean profileGuidedOptimizations;
+    private static String graalvmInstall;
+    private static String authToken;
+    private static String uuid;
 
     public static void main(String[] args) throws IOException {
-        System.out.println("Make sure GRAALVM_HOME is set.");
+        ArgumentParser parser = ArgumentParsers.newFor("MCNativeBuilder").build()
+                .defaultHelp(true)
+                .description("Build Minecraft Native Images.");
+        parser.addArgument("--version")
+                .choices("1.18.2", "1.19.0", "1.19.2", "1.19.4", "1.20.2")
+                .setDefault("1.20.2")
+                .help("Version of Minecraft to compile");
+        parser.addArgument("--accessToken")
+                .setDefault("0")
+                .help("Your Minecraft accounts auth token.");
+        parser.addArgument("--uuid")
+                .help("Your Minecraft accounts UUID.");
+        parser.addArgument("--pgos")
+                .choices(true, false)
+                .setDefault(true)
+                .type(Boolean.class)
+                .help("Whether or not to enable Profile-Guided-Optimizations.");
+        parser.addArgument("--graalvm")
+                .help("Where your graalvm sdk is.");
 
-        ProvidedSettings settings = new ProvidedSettings(args[0], new File("./install"), new File("./install"));
+        Namespace ns = null;
+        try {
+            ns = parser.parseArgs(args);
+        } catch (ArgumentParserException e) {
+            parser.handleError(e);
+            System.exit(1);
+        }
+        version = ns.get("version");
+        profileGuidedOptimizations = ns.getBoolean("pgos");
+        graalvmInstall = ns.get("graalvm");
+        authToken = ns.get("accessToken");
+        uuid = ns.get("uuid");
+
+        ProvidedSettings settings = new ProvidedSettings(version, new File("./install"), new File("./install"));
         MinecraftParser.launch(settings);
         MinecraftDownloader.launch(settings, false, null, false,  false);
 
@@ -46,43 +89,38 @@ public class Main {
         libsBuilder.append(settings.getClientJarFile().getAbsolutePath());
 
         MinecraftClasspathBuilder.launch(settings, false);
-        MinecraftAuthenticator.launch(settings, new File("./auth.json"), "web", false);
 
-        MinecraftJavaRuntimeSetup.launch(settings, false, new File(System.getenv("GRAALVM_HOME") + "/bin/javaw.exe"));
+        if(authToken == null || uuid == null){
+            MinecraftAuthenticator.launch(settings, new File("./auth.json"), "web", false);
+        } else {
+            settings.addVariable(LauncherVariables.AUTH_ACCESS_TOKEN, authToken);
+            settings.addVariable(LauncherVariables.AUTH_UUID, uuid);
+        }
+
+        MinecraftJavaRuntimeSetup.launch(settings, false, new File(graalvmInstall + "/bin/javaw.exe"));
         System.out.println("Waiting for Minecraft to close...");
-        System.out.println("Run every configuration at least once.");
-        MinecraftLauncher.launch(settings, "-agentlib:native-image-agent=config-merge-dir=../configs/" + args[0]);
+        System.out.println("Generate a world, go to the end, leave, join a server.");
+        MinecraftLauncher.launch(settings, "-agentlib:native-image-agent=config-merge-dir=../configs/" + version);
 
         File buildDir = new File("./native-build");
         buildDir.mkdirs();
 
-
-        ProcessBuilder builder = new ProcessBuilder();
-        builder.command(System.getenv("GRAALVM_HOME") + "/bin/native-image.cmd", "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
-                "-H:ConfigurationFileDirectories=../configs/default,../configs/" + args[0], "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libsBuilder.toString(), "net.minecraft.client.main.Main", args[0]);
-        builder.directory(buildDir);
-
-        boolean compilePGOs = false;
-        if(args.length > 1) {
-            compilePGOs = Boolean.parseBoolean(args[1]);
-            if(compilePGOs) {
-                List<String> commands = builder.command();
-                commands.add(builder.command().size() - 4, "--pgo-instrument");
-                builder.command(commands);
-            }
+        Process process = null;
+        if(profileGuidedOptimizations) {
+            startCompile(libsBuilder.toString(), "./native-build", "--pgo-instrument");
+        } else {
+            startCompile(libsBuilder.toString(), "./native-build");
         }
-
-        System.out.println(builder.command());
-        Process process = builder.start();
+        assert process != null;
 
         while(process.isAlive()) {
             System.out.println(process.inputReader().readLine());
         }
 
-        if(compilePGOs) {
+        if(profileGuidedOptimizations) {
             // Load MC to generate IPROF file
-            builder = new ProcessBuilder();
-            builder.command("./native-build/" + args[0] + ".exe", "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
+            ProcessBuilder builder = new ProcessBuilder();
+            builder.command("./native-build/" + version + ".exe", "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
                     "--assetIndex", "8", "--username", settings.getVariable(LauncherVariables.AUTH_PLAYER_NAME), "--uuid", settings.getVariable(LauncherVariables.AUTH_UUID), "--version", "MCNative");
             builder.directory(new File("./install"));
             process = builder.start();
@@ -92,17 +130,25 @@ public class Main {
                 System.out.println(process.errorReader().readLine());
             }
 
-            builder = new ProcessBuilder();
-            builder.command(System.getenv("GRAALVM_HOME") + "/bin/native-image.cmd", "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
-                    "-H:ConfigurationFileDirectories=../configs/default,../configs/" + args[0], "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "--pgo=../install/default.iprof", "-cp", libsBuilder.toString(), "net.minecraft.client.main.Main", args[0]);
-            System.out.println(builder.command());
-            builder.directory(buildDir);
-            process = builder.start();
-
+            process = startCompile(libsBuilder.toString(), "./native-build", "--pgo", "../install/default.iprof");
             while(process.isAlive()) {
                 System.out.println(process.inputReader().readLine());
             }
         }
+    }
+
+    private static Process startCompile(String libs, String buildDir, String... extraArgs) throws IOException {
+        ProcessBuilder builder = new ProcessBuilder();
+        builder.command(graalvmInstall + "/bin/native-image.cmd", "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
+                "-H:ConfigurationFileDirectories=../configs/default,../configs/" + version, "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libs, "net.minecraft.client.main.Main", version);
+        for(String arg : extraArgs) {
+            List<String> commands = builder.command();
+            commands.add(builder.command().size() - 4, arg);
+            builder.command(commands);
+        }
+        System.out.println(builder.command());
+        builder.directory(new File(buildDir));
+        return builder.start();
     }
 
     private static String createLWJGL(DownloadableFile file) {
@@ -115,22 +161,26 @@ public class Main {
 
         if (matchesLWJGLPattern) {
             if (isNatives) {
-                return formatLWJGLName(baseName, nameParts[2], nameParts[3]);
+                return formatLWJGLName(baseName, true, nameParts[2], nameParts[3]);
             } else {
                 return baseName + "/" + baseName + ".jar";
             }
         } else {
             if (isNatives) {
-                return formatLWJGLName(baseName, nameParts[1], nameParts[3], nameParts[4]);
+                return formatLWJGLName(baseName, false, nameParts[1], nameParts[3], nameParts[4]);
             } else {
                 return baseName + "-" + nameParts[1] + "/" + baseName + "-" + nameParts[1] + ".jar";
             }
         }
     }
 
-    private static String formatLWJGLName(String baseName, String... parts) {
+    private static String formatLWJGLName(String baseName, boolean isSingleNamespace, String... parts) {
         StringBuilder sb = new StringBuilder(baseName);
-        sb.append("-").append(parts[0]).append("/");
+        if(!isSingleNamespace) {
+            sb.append("-").append(parts[0]).append("/");
+        } else {
+            sb.append("/");
+        }
         sb.append(baseName).append("-").append(parts[0]).append("-");
         for (int i = 1; i < parts.length; i++) {
             sb.append(parts[i]);
