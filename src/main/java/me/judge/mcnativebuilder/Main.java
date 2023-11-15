@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
@@ -25,6 +26,8 @@ public class Main {
     private static String graalvmInstall;
     private static String authToken;
     private static String uuid;
+    private static String customJar;
+    private static List<String> extraLibs = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
         ArgumentParser parser = ArgumentParsers.newFor("MCNativeBuilder").build()
@@ -46,6 +49,11 @@ public class Main {
                 .help("Whether or not to enable Profile-Guided-Optimizations.");
         parser.addArgument("--graalvm")
                 .help("Where your graalvm sdk is.");
+        parser.addArgument("--customJar")
+                .help("Path to a custom main jar file");
+        parser.addArgument("--extraLibs")
+                .type(List.class)
+                .help("Add extra files to the classpath");
 
         Namespace ns = null;
         try {
@@ -59,6 +67,8 @@ public class Main {
         graalvmInstall = ns.get("graalvm");
         authToken = ns.get("accessToken");
         uuid = ns.get("uuid");
+        customJar = ns.get("customJar");
+        extraLibs = ns.getList("extraLibs");
 
         ProvidedSettings settings = new ProvidedSettings(version, new File("./install"), new File("./install"));
         MinecraftParser.launch(settings);
@@ -86,7 +96,17 @@ public class Main {
             libsBuilder.append(lib).append(";");
         }
         libsBuilder.append(System.getProperty("user.dir")).append("/libs/JFRSub-1.0-SNAPSHOT.jar;");
-        libsBuilder.append(settings.getClientJarFile().getAbsolutePath());
+        if(extraLibs != null) {
+            for (String lib : extraLibs) {
+                settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + lib + ";");
+                libsBuilder.append(lib + ";");
+            }
+        }
+        if(customJar != null) {
+            settings.addVariable(LauncherVariables.PRIMARY_JAR, customJar);
+        } else {
+            libsBuilder.append(settings.getClientJarFile().getAbsolutePath());
+        }
 
         MinecraftClasspathBuilder.launch(settings, false);
 
@@ -105,13 +125,12 @@ public class Main {
         File buildDir = new File("./native-build");
         buildDir.mkdirs();
 
-        Process process = null;
+        Process process;
         if(profileGuidedOptimizations) {
-            startCompile(libsBuilder.toString(), "./native-build", "--pgo-instrument");
+            process = startCompile(libsBuilder.toString(), "./native-build", "--pgo-instrument");
         } else {
-            startCompile(libsBuilder.toString(), "./native-build");
+            process = startCompile(libsBuilder.toString(), "./native-build");
         }
-        assert process != null;
 
         while(process.isAlive()) {
             System.out.println(process.inputReader().readLine());
@@ -130,7 +149,7 @@ public class Main {
                 System.out.println(process.errorReader().readLine());
             }
 
-            process = startCompile(libsBuilder.toString(), "./native-build", "--pgo", "../install/default.iprof");
+            process = startCompile(libsBuilder.toString(), "./native-build", "--pgo=../install/default.iprof");
             while(process.isAlive()) {
                 System.out.println(process.inputReader().readLine());
             }
