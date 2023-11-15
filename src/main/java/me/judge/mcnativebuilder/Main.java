@@ -17,10 +17,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Main {
     public static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
-    public static final String SLF4J_JDK14 = "https://repo1.maven.org/maven2/org/slf4j/slf4j-jdk14/2.0.9/slf4j-jdk14-2.0.9.jar";
     private static String version;
     private static Boolean profileGuidedOptimizations;
     private static String graalvmInstall;
@@ -86,29 +87,23 @@ public class Main {
                 FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
             }
 
-            if(file.getPath().contains("log4j")) {
-                if(!file.getPath().contains("log4j-core")) {
-                    continue;
-                }
-                FileUtil.downloadFile(SLF4J_JDK14, file.getDownloadedFile(), null);
-            }
-
             libsBuilder.append(lib).append(";");
         }
         libsBuilder.append(System.getProperty("user.dir")).append("/libs/JFRSub-1.0-SNAPSHOT.jar;");
+        MinecraftClasspathBuilder.launch(settings, false);
+
         if(extraLibs != null) {
             for (String lib : extraLibs) {
                 settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + lib + ";");
                 libsBuilder.append(lib + ";");
             }
         }
+
         if(customJar != null) {
             settings.addVariable(LauncherVariables.PRIMARY_JAR, customJar);
         } else {
             libsBuilder.append(settings.getClientJarFile().getAbsolutePath());
         }
-
-        MinecraftClasspathBuilder.launch(settings, false);
 
         if(authToken == null || uuid == null){
             MinecraftAuthenticator.launch(settings, new File("./auth.json"), "web", false);
@@ -140,7 +135,7 @@ public class Main {
             // Load MC to generate IPROF file
             ProcessBuilder builder = new ProcessBuilder();
             builder.command("./native-build/" + version + ".exe", "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
-                    "--assetIndex", "8", "--username", settings.getVariable(LauncherVariables.AUTH_PLAYER_NAME), "--uuid", settings.getVariable(LauncherVariables.AUTH_UUID), "--version", "MCNative");
+                    "--assetIndex", settings.getVariable(LauncherVariables.ASSET_INDEX_NAME), "--username", settings.getVariable(LauncherVariables.AUTH_PLAYER_NAME), "--uuid", settings.getVariable(LauncherVariables.AUTH_UUID), "--version", "MCNative");
             builder.directory(new File("./install"));
             process = builder.start();
 
