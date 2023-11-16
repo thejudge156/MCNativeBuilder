@@ -144,7 +144,7 @@ public class Main {
         if(profileGuidedOptimizations) {
             // Load MC to generate IPROF file
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("./native-build/" + version + OS_EXT, "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
+            builder.command("../native-build/" + version + OS_EXT, "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
                     "--assetIndex", settings.getVariable(LauncherVariables.ASSET_INDEX_NAME), "--username", settings.getVariable(LauncherVariables.AUTH_PLAYER_NAME), "--uuid", settings.getVariable(LauncherVariables.AUTH_UUID), "--version", "MCNative");
             builder.directory(new File("./install"));
             process = builder.start();
