@@ -27,7 +27,7 @@ public class Main {
             OS_EXT_SHELL = ".cmd";
         } else {
             OS_EXT = "";
-            OS_EXT_SHELL = ".sh";
+            OS_EXT_SHELL = "";
         }
     }
 
