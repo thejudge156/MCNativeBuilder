@@ -5,7 +5,6 @@ import net.hycrafthd.minecraft_downloader.library.DownloadableFile;
 import net.hycrafthd.minecraft_downloader.settings.LauncherVariables;
 import net.hycrafthd.minecraft_downloader.settings.ProvidedSettings;
 import net.hycrafthd.minecraft_downloader.util.FileUtil;
-import net.sourceforge.argparse4j.ArgumentParserBuilder;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
@@ -13,26 +12,25 @@ import net.sourceforge.argparse4j.inf.Namespace;
 
 import java.io.File;
 import java.io.IOException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class Main {
     static {
         if(System.getProperty("os.name").contains("Windows")) {
             OS_EXT = ".exe";
             OS_EXT_SHELL = ".cmd";
+            OS_SEPARATOR = ";";
         } else {
             OS_EXT = "";
             OS_EXT_SHELL = "";
+            OS_SEPARATOR = ":";
         }
     }
 
     public static String OS_EXT;
     public static String OS_EXT_SHELL;
+    public static String OS_SEPARATOR;
     public static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
     private static String version;
     private static Boolean profileGuidedOptimizations;
@@ -99,15 +97,15 @@ public class Main {
                 FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
             }
 
-            libsBuilder.append(lib).append(";");
+            libsBuilder.append(lib).append(OS_SEPARATOR);
         }
-        libsBuilder.append(System.getProperty("user.dir")).append("/libs/JFRSub-1.0-SNAPSHOT.jar;");
+        libsBuilder.append(System.getProperty("user.dir")).append("/libs/JFRSub-1.0-SNAPSHOT.jar" + OS_SEPARATOR);
         MinecraftClasspathBuilder.launch(settings, false);
 
         if(extraLibs != null) {
             for (String lib : extraLibs) {
-                settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + lib + ";");
-                libsBuilder.append(lib + ";");
+                settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + lib + OS_SEPARATOR);
+                libsBuilder.append(lib + OS_SEPARATOR);
             }
         }
 
@@ -124,7 +122,7 @@ public class Main {
             settings.addVariable(LauncherVariables.AUTH_UUID, uuid);
         }
 
-        MinecraftJavaRuntimeSetup.launch(settings, false, new File(graalvmInstall + "/bin/javaw.exe"));
+        MinecraftJavaRuntimeSetup.launch(settings, false, new File(graalvmInstall + "/bin/java" + OS_EXT));
         System.out.println("Waiting for Minecraft to close...");
         System.out.println("Generate a world, go to the end, leave, join a server.");
         MinecraftLauncher.launch(settings, "-agentlib:native-image-agent=config-merge-dir=../configs/" + version);
