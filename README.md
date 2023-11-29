@@ -3,8 +3,6 @@
 
 Very in alpha, expect bugs and major changes!
 
-### ONLY WINDOWS IS SUPPORTED AT THIS TIME
-
 ## Why did I do this?
 ### Building native images of Minecraft is usally an annoying, time consuming, and complex process that requires not only a lot of knowledge of the JVM, but also Minecraft itself. This tool is meant to allow for quick and easy building of native Minecraft images without much work on the end users side.
 
