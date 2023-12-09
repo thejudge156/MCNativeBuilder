@@ -1,5 +1,7 @@
 # MCNativeBuilder
 ### A tool for building native Minecraft images utilizing [GraalVM](https://github.com/oracle/graal).
+You can support me with Cash App. $thejudge156
+
 
 Very in alpha, expect bugs and major changes!
 
