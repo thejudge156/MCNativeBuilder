@@ -1,11 +1,6 @@
 # MCNativeBuilder
 ### A tool for building native Minecraft images utilizing [GraalVM](https://github.com/oracle/graal).
 
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/N4N1S0WVY)
-
-
-
 Very in alpha, expect bugs and major changes!
 
 ## Why did I do this?
