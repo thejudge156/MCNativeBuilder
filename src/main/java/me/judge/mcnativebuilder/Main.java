@@ -14,22 +14,26 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class Main {
     static {
         if(System.getProperty("os.name").contains("Windows")) {
             OS_EXT = ".exe";
             OS_EXT_SHELL = ".cmd";
+            OS_EXT_BAT = ".bat";
             OS_SEPARATOR = ";";
         } else {
             OS_EXT = "";
             OS_EXT_SHELL = "";
+            OS_EXT_BAT = "";
             OS_SEPARATOR = ":";
         }
     }
 
     public static String OS_EXT;
     public static String OS_EXT_SHELL;
+    public static String OS_EXT_BAT;
     public static String OS_SEPARATOR;
     public static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
     private static String version;
@@ -39,13 +43,16 @@ public class Main {
     private static String uuid;
     private static String customJar;
     private static List<String> extraLibs = new ArrayList<>();
+    private static List<String> mixinMods = new ArrayList<>();
+    private static List<String> mixinPackages = new ArrayList<>();
+    private static boolean fabric;
 
     public static void main(String[] args) throws IOException {
         ArgumentParser parser = ArgumentParsers.newFor("MCNativeBuilder").build()
                 .defaultHelp(true)
                 .description("Build Minecraft Native Images.");
         parser.addArgument("--version")
-                .choices("1.18.2", "1.19.0", "1.19.2", "1.19.4", "1.20.2")
+                .choices("1.18.2", "1.19.0", "1.19.2", "1.19.4", "1.20.2", "1.20.4")
                 .setDefault("1.20.2")
                 .help("Version of Minecraft to compile");
         parser.addArgument("--accessToken")
@@ -55,16 +62,30 @@ public class Main {
                 .help("Your Minecraft accounts UUID.");
         parser.addArgument("--pgos")
                 .choices(true, false)
-                .setDefault(true)
+                .setDefault(false)
                 .type(Boolean.class)
                 .help("Whether or not to enable Profile-Guided-Optimizations.");
         parser.addArgument("--graalvm")
                 .help("Where your graalvm sdk is.");
         parser.addArgument("--customJar")
                 .help("Path to a custom main jar file");
+        parser.addArgument("--replacedLibs")
+                .help("MC Libraries to replace")
+                .nargs("*");
         parser.addArgument("--extraLibs")
-                .type(List.class)
+                .nargs("*")
                 .help("Add extra files to the classpath");
+        parser.addArgument("--fabric")
+                .choices(true, false)
+                .setDefault(false)
+                .type(Boolean.class)
+                .help("Adds a VERY basic fabric patch");
+        parser.addArgument("--mixinMods")
+                .nargs("*")
+                .help("Add mixin code jars to the classpath");
+        parser.addArgument("--mixinPackages")
+                .nargs("*")
+                .help("Add mixin packages to process");
 
         Namespace ns = null;
         try {
@@ -79,15 +100,17 @@ public class Main {
         authToken = ns.get("accessToken");
         uuid = ns.get("uuid");
         customJar = ns.get("customJar");
+        mixinMods = ns.getList("mixinMods");
+        mixinPackages = ns.getList("mixinPackages");
         extraLibs = ns.getList("extraLibs");
+        fabric = ns.getBoolean("fabric");
 
         ProvidedSettings settings = new ProvidedSettings(version, new File("./install"), new File("./install"));
         MinecraftParser.launch(settings);
         MinecraftDownloader.launch(settings, false, null, false,  false);
 
-        StringBuilder libsBuilder = new StringBuilder();
+        List<File> libsBuilder = new ArrayList<>();
         for(DownloadableFile file : settings.getGeneratedSettings().getDownloadableFiles()) {
-            String lib = file.getDownloadedFile().getCanonicalPath();
             if(file.isNative()) {
                 continue;
             }
@@ -97,22 +120,55 @@ public class Main {
                 FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
             }
 
-            libsBuilder.append(lib).append(OS_SEPARATOR);
+            libsBuilder.add(file.getDownloadedFile());
         }
-        libsBuilder.append(System.getProperty("user.dir")).append("/libs/JFRSub-1.0-SNAPSHOT.jar" + OS_SEPARATOR);
-        MinecraftClasspathBuilder.launch(settings, false);
+        MinecraftClasspathBuilder.launch(settings, true);
+        libsBuilder.addAll(settings.getGeneratedSettings().getClassPath());
 
-        if(extraLibs != null) {
-            for (String lib : extraLibs) {
-                settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + lib + OS_SEPARATOR);
-                libsBuilder.append(lib + OS_SEPARATOR);
+        if(extraLibs != null || fabric) {
+            if(fabric) {
+                libsBuilder.add(new File("./libs/FabricShim.jar"));
             }
+            for (String lib : extraLibs) {
+                File file = new File(lib);
+                libsBuilder.add(file);
+            }
+            settings.addVariable(LauncherVariables.CLASSPATH, settings.getGeneratedSettings().getClassPath().stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)));
         }
 
         if(customJar != null) {
-            settings.addVariable(LauncherVariables.PRIMARY_JAR, customJar);
-        } else {
-            libsBuilder.append(settings.getClientJarFile().getAbsolutePath());
+            String libs = settings.getVariable(LauncherVariables.CLASSPATH);
+            StringBuilder newLibs = new StringBuilder();
+            for(String lib : libs.split(OS_SEPARATOR)) {
+                if(!lib.contains(version + "-client.jar")) {
+                    newLibs.append(lib + ";");
+                }
+            }
+            newLibs.append(customJar + OS_SEPARATOR);
+            settings.addVariable(LauncherVariables.CLASSPATH, newLibs.toString());
+        }
+
+        if(mixinMods != null) {
+            new File("./output").mkdir();
+            File client = null;
+            for(String path : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
+                File file = new File(path);
+                if(file.getName().contains("-client.jar")) {
+                    client = file;
+                }
+            }
+            for (String lib : mixinMods) {
+                for (String packages : mixinPackages) {
+                    ProcessBuilder builder = new ProcessBuilder();
+                    builder.command("./libs/Arbiter-1.0-SNAPSHOT/bin/Arbiter" + OS_EXT_BAT, "--target", client.getAbsolutePath(), "--output", "./output", "--mixin", lib, "--package", packages);
+                    System.out.println("Args: " + builder.command());
+                    Process process = builder.start();
+                    while(process.isAlive()) {
+                        System.out.println(process.inputReader().readLine());
+                        System.out.println(process.errorReader().readLine());
+                    }
+                }
+            }
         }
 
         if(authToken == null || uuid == null){
@@ -122,6 +178,7 @@ public class Main {
             settings.addVariable(LauncherVariables.AUTH_UUID, uuid);
         }
 
+        libsBuilder.add(new File(System.getProperty("user.dir"), "/libs/JFRSub-1.0-SNAPSHOT.jar"));
         MinecraftJavaRuntimeSetup.launch(settings, false, new File(graalvmInstall + "/bin/java" + OS_EXT));
         System.out.println("Waiting for Minecraft to close...");
         System.out.println("Generate a world, go to the end, leave, join a server.");
@@ -144,7 +201,7 @@ public class Main {
         if(profileGuidedOptimizations) {
             // Load MC to generate IPROF file
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("../native-build/" + version + OS_EXT, "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
+            builder.command("./native-build/" + version + OS_EXT, "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
                     "--assetIndex", settings.getVariable(LauncherVariables.ASSET_INDEX_NAME), "--username", settings.getVariable(LauncherVariables.AUTH_PLAYER_NAME), "--uuid", settings.getVariable(LauncherVariables.AUTH_UUID), "--version", "MCNative");
             builder.directory(new File("./install"));
             process = builder.start();
