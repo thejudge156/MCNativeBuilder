@@ -168,7 +168,7 @@ public class Main {
             if(!mixinsGenerated) {
                 ProcessBuilder builder = new ProcessBuilder();
                 builder.command(System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/bin/Arbiter" + OS_EXT_BAT, "-o", path + "/mixinOutput", "--transformer",
-                        "MIXIN_METHOD_REMAPPER_PRIVATIZER", "--transformer", "ACCESSOR_DESYNTHESIZER");
+                        "MIXIN_METHOD_REMAPPER_PRIVATIZER", "--transformer", "ACCESSOR_DESYNTHESIZER", "--transformer", "--transformer", "OVERWRITE_FIXER");
 
                 if (mixinRefMaps != null) {
                     builder.environment().put("JAVA_OPTS", "-Dmixin.env.refMapRemappingFile=" + mixinRefMaps.stream().collect(Collectors.joining(OS_SEPARATOR)));
@@ -199,13 +199,10 @@ public class Main {
                 while (process.isAlive()) {
                     if(i > 999999) {
                         System.out.println("Mixin took too long, open an issue if it causes a problem.");
+                        process.destroy();
                         break;
                     }
                     String output = process.inputReader().readLine();
-                    if (output != null) {
-                        System.out.println(output);
-                    }
-                    output = process.errorReader().readLine();
                     if (output != null) {
                         System.out.println(output);
                     }
@@ -213,7 +210,7 @@ public class Main {
                 }
 
                 List<String> classes = new ArrayList<>();
-                Files.walkFileTree(Path.of(path + "/mixinOutput"), new FileVisitor<Path>() {
+                Files.walkFileTree(Path.of(path + "/mixinOutput"), new FileVisitor<>() {
                     @Override
                     public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                         return FileVisitResult.CONTINUE;
@@ -270,16 +267,17 @@ public class Main {
         MinecraftJavaRuntimeSetup.launch(settings, false, new File(graalvmInstall + "/bin/java" + OS_EXT));
         System.out.println("Waiting for Minecraft to close...");
         System.out.println("Generate a world, go to the end, leave, join a server.");
-        MinecraftLauncher.launch(settings, "-agentlib:native-image-agent=config-merge-dir=../configs/" + version);
+        MinecraftLauncher.launch(settings, "-noverify -agentlib:native-image-agent=config-merge-dir=../configs/" + version);
 
         File buildDir = new File(path, "native-build");
         buildDir.mkdirs();
 
         Process process;
         if(profileGuidedOptimizations) {
-            process = startCompile(libsBuilder.toString(), path + "/native-build", "--pgo-instrument");
+            process = startCompile(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)),
+                    path + "/native-build", "--pgo-instrument");
         } else {
-            process = startCompile(libsBuilder.toString(), path + "/native-build");
+            process = startCompile(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)), path + "/native-build");
         }
 
         while(process.isAlive()) {
