@@ -4,6 +4,7 @@ import net.hycrafthd.minecraft_downloader.*;
 import net.hycrafthd.minecraft_downloader.library.DownloadableFile;
 import net.hycrafthd.minecraft_downloader.settings.LauncherVariables;
 import net.hycrafthd.minecraft_downloader.settings.ProvidedSettings;
+import net.hycrafthd.minecraft_downloader.util.FileUtil;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
@@ -132,7 +133,7 @@ public class Main {
             if(file.getDownloadedFile().getName().contains("lwjgl")) {
                 String newLWJGL = createLWJGL(file);
                 System.out.printf("Replacing %s with 3.3.3 Version.\n", file.getDownloadedFile().getName());
-                //FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
+                FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
             }
 
             libsBuilder.add(file.getDownloadedFile());
