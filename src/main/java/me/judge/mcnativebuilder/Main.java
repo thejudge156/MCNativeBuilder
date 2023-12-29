@@ -4,7 +4,6 @@ import net.hycrafthd.minecraft_downloader.*;
 import net.hycrafthd.minecraft_downloader.library.DownloadableFile;
 import net.hycrafthd.minecraft_downloader.settings.LauncherVariables;
 import net.hycrafthd.minecraft_downloader.settings.ProvidedSettings;
-import net.hycrafthd.minecraft_downloader.util.FileUtil;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
@@ -12,9 +11,16 @@ import net.sourceforge.argparse4j.inf.Namespace;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
 
 public class Main {
     static {
@@ -37,13 +43,15 @@ public class Main {
     public static String OS_SEPARATOR;
     public static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
     private static String version;
+    private static String path;
     private static Boolean profileGuidedOptimizations;
     private static String graalvmInstall;
     private static String authToken;
     private static String uuid;
     private static String customJar;
-    private static List<String> extraLibs = new ArrayList<>();
+    private static List<File> extraLibs = new ArrayList<>();
     private static List<String> mixinMods = new ArrayList<>();
+    private static List<String> mixinRefMaps = new ArrayList<>();
     private static List<String> mixinPackages = new ArrayList<>();
     private static boolean fabric;
 
@@ -86,6 +94,9 @@ public class Main {
         parser.addArgument("--mixinPackages")
                 .nargs("*")
                 .help("Add mixin packages to process");
+        parser.addArgument("--mixinRefMaps")
+                .nargs("*")
+                .help("Refmaps for coresponding mods");
 
         Namespace ns = null;
         try {
@@ -102,12 +113,16 @@ public class Main {
         customJar = ns.get("customJar");
         mixinMods = ns.getList("mixinMods");
         mixinPackages = ns.getList("mixinPackages");
+        mixinRefMaps = ns.getList("mixinRefMaps");
         extraLibs = ns.getList("extraLibs");
         fabric = ns.getBoolean("fabric");
 
-        ProvidedSettings settings = new ProvidedSettings(version, new File("./install"), new File("./install"));
+        path = System.getProperty("user.dir") + "/" + version;
+
+        ProvidedSettings settings = new ProvidedSettings(version, new File(path + "/install"), new File(path + "/install"));
         MinecraftParser.launch(settings);
-        MinecraftDownloader.launch(settings, false, null, false,  false);
+
+        MinecraftDownloader.launch(settings, false, null, false, false);
 
         List<File> libsBuilder = new ArrayList<>();
         for(DownloadableFile file : settings.getGeneratedSettings().getDownloadableFiles()) {
@@ -117,7 +132,7 @@ public class Main {
             if(file.getDownloadedFile().getName().contains("lwjgl")) {
                 String newLWJGL = createLWJGL(file);
                 System.out.printf("Replacing %s with 3.3.3 Version.\n", file.getDownloadedFile().getName());
-                FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
+                //FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
             }
 
             libsBuilder.add(file.getDownloadedFile());
@@ -125,54 +140,126 @@ public class Main {
         MinecraftClasspathBuilder.launch(settings, true);
         libsBuilder.addAll(settings.getGeneratedSettings().getClassPath());
 
-        if(extraLibs != null || fabric) {
-            if(fabric) {
-                libsBuilder.add(new File("./libs/FabricShim.jar"));
-            }
-            for (String lib : extraLibs) {
-                File file = new File(lib);
-                libsBuilder.add(file);
-            }
-            settings.addVariable(LauncherVariables.CLASSPATH, settings.getGeneratedSettings().getClassPath().stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)));
+        if(fabric) {
+            libsBuilder.add(new File(System.getProperty("user.dir"), "libs/FabricShim.jar"));
         }
+
+        if(extraLibs != null) {
+            libsBuilder.addAll(extraLibs);
+        }
+        settings.addVariable(LauncherVariables.CLASSPATH, libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)));
 
         if(customJar != null) {
             String libs = settings.getVariable(LauncherVariables.CLASSPATH);
             StringBuilder newLibs = new StringBuilder();
             for(String lib : libs.split(OS_SEPARATOR)) {
                 if(!lib.contains(version + "-client.jar")) {
-                    newLibs.append(lib + ";");
+                    newLibs.append(lib + OS_SEPARATOR);
                 }
             }
-            newLibs.append(customJar + OS_SEPARATOR);
+            newLibs.append(customJar);
             settings.addVariable(LauncherVariables.CLASSPATH, newLibs.toString());
         }
 
         if(mixinMods != null) {
-            new File("./output").mkdir();
-            File client = null;
-            for(String path : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
-                File file = new File(path);
-                if(file.getName().contains("-client.jar")) {
-                    client = file;
+            File outputDir = new File(path, "mixinOutput");
+            boolean mixinsGenerated = outputDir.exists();
+            if(!mixinsGenerated) {
+                ProcessBuilder builder = new ProcessBuilder();
+                builder.command(System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/bin/Arbiter" + OS_EXT_BAT, "-o", path + "/mixinOutput", "--transformer",
+                        "MIXIN_METHOD_REMAPPER_PRIVATIZER", "--transformer", "ACCESSOR_DESYNTHESIZER");
+
+                if (mixinRefMaps != null) {
+                    builder.environment().put("JAVA_OPTS", "-Dmixin.env.refMapRemappingFile=" + mixinRefMaps.stream().collect(Collectors.joining(OS_SEPARATOR)));
                 }
-            }
-            for (String lib : mixinMods) {
+
+                for (String target : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
+                    List<String> list = builder.command();
+                    list.add("-t");
+                    list.add(target);
+                    builder.command(list);
+                }
+                for (String lib : mixinMods) {
+                    List<String> list = builder.command();
+                    list.add("-m");
+                    list.add(lib);
+                    builder.command(list);
+                }
                 for (String packages : mixinPackages) {
-                    ProcessBuilder builder = new ProcessBuilder();
-                    builder.command("./libs/Arbiter-1.0-SNAPSHOT/bin/Arbiter" + OS_EXT_BAT, "--target", client.getAbsolutePath(), "--output", "./output", "--mixin", lib, "--package", packages);
-                    System.out.println("Args: " + builder.command());
-                    Process process = builder.start();
-                    while(process.isAlive()) {
-                        System.out.println(process.inputReader().readLine());
-                        System.out.println(process.errorReader().readLine());
+                    List<String> list = builder.command();
+                    list.add("-p");
+                    list.add(packages);
+                    builder.command(list);
+                }
+
+                System.out.println("Args: " + builder.command());
+                Process process = builder.start();
+                int i = 0;
+                while (process.isAlive()) {
+                    if(i > 999999) {
+                        System.out.println("Mixin took too long, open an issue if it causes a problem.");
+                        break;
+                    }
+                    String output = process.inputReader().readLine();
+                    if (output != null) {
+                        System.out.println(output);
+                    }
+                    output = process.errorReader().readLine();
+                    if (output != null) {
+                        System.out.println(output);
+                    }
+                    i++;
+                }
+
+                List<String> classes = new ArrayList<>();
+                Files.walkFileTree(Path.of(path + "/mixinOutput"), new FileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        classes.add(Path.of(path + "/mixinOutput").relativize(file).toString());
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+
+                Map<String, String> env = new HashMap<>();
+                for(String target : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
+                    JarFile file = new JarFile(target);
+
+                    for(String clazz : classes) {
+                        ZipEntry entry = file.getEntry(clazz);
+                        if (entry != null) {
+                            URI uri = URI.create("jar:file:" + target);
+
+                            try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
+                                Files.copy(Path.of(path + "/mixinOutput/" + clazz), zipfs.getPath(clazz), StandardCopyOption.REPLACE_EXISTING);
+                            }
+                        }
                     }
                 }
+            }
+
+            // Add mod to classpath
+            for (String mod : mixinMods) {
+                settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + OS_SEPARATOR + mod);
             }
         }
 
         if(authToken == null || uuid == null){
-            MinecraftAuthenticator.launch(settings, new File("./auth.json"), "web", false);
+            MinecraftAuthenticator.launch(settings, new File(path, "auth.json"), "web", false);
         } else {
             settings.addVariable(LauncherVariables.AUTH_ACCESS_TOKEN, authToken);
             settings.addVariable(LauncherVariables.AUTH_UUID, uuid);
@@ -184,26 +271,33 @@ public class Main {
         System.out.println("Generate a world, go to the end, leave, join a server.");
         MinecraftLauncher.launch(settings, "-agentlib:native-image-agent=config-merge-dir=../configs/" + version);
 
-        File buildDir = new File("./native-build");
+        File buildDir = new File(path, "native-build");
         buildDir.mkdirs();
 
         Process process;
         if(profileGuidedOptimizations) {
-            process = startCompile(libsBuilder.toString(), "./native-build", "--pgo-instrument");
+            process = startCompile(libsBuilder.toString(), path + "/native-build", "--pgo-instrument");
         } else {
-            process = startCompile(libsBuilder.toString(), "./native-build");
+            process = startCompile(libsBuilder.toString(), path + "/native-build");
         }
 
         while(process.isAlive()) {
-            System.out.println(process.inputReader().readLine());
+            String output = process.inputReader().readLine();
+            if(output != null) {
+                System.out.println(output);
+            }
+            output = process.errorReader().readLine();
+            if(output != null) {
+                System.out.println(output);
+            }
         }
 
         if(profileGuidedOptimizations) {
             // Load MC to generate IPROF file
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("./native-build/" + version + OS_EXT, "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
+            builder.command(path + "/native-build/" + version + OS_EXT, "--accessToken", settings.getVariable(LauncherVariables.AUTH_ACCESS_TOKEN),
                     "--assetIndex", settings.getVariable(LauncherVariables.ASSET_INDEX_NAME), "--username", settings.getVariable(LauncherVariables.AUTH_PLAYER_NAME), "--uuid", settings.getVariable(LauncherVariables.AUTH_UUID), "--version", "MCNative");
-            builder.directory(new File("./install"));
+            builder.directory(new File(path, "/install"));
             process = builder.start();
 
             System.out.println("Generate a world, then join a server afterwards. It might take a while.");
@@ -212,8 +306,13 @@ public class Main {
             }
 
             process = startCompile(libsBuilder.toString(), "./native-build", "--pgo=../install/default.iprof");
-            while(process.isAlive()) {
-                System.out.println(process.inputReader().readLine());
+            String output = process.inputReader().readLine();
+            if(output != null) {
+                System.out.println(output);
+            }
+            output = process.errorReader().readLine();
+            if(output != null) {
+                System.out.println(output);
             }
         }
     }
