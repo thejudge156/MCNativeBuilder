@@ -50,7 +50,9 @@ public class Main {
     private static String authToken;
     private static String uuid;
     private static String customJar;
-    private static List<File> extraLibs = new ArrayList<>();
+    private static String fabricEntryPoints;
+    private static String fabricEntryPointsClient;
+    private static List<String> extraLibs = new ArrayList<>();
     private static List<String> mixinMods = new ArrayList<>();
     private static List<String> mixinRefMaps = new ArrayList<>();
     private static List<String> mixinPackages = new ArrayList<>();
@@ -98,6 +100,10 @@ public class Main {
         parser.addArgument("--mixinRefMaps")
                 .nargs("*")
                 .help("Refmaps for coresponding mods");
+        parser.addArgument("--fabricEntrypoints")
+                .help("Common entrypoints for coresponding mods, comma seperated");
+        parser.addArgument("--fabricEntrypointsClient")
+                .help("Client entrypoints for coresponding mods, comma seperated");
 
         Namespace ns = null;
         try {
@@ -117,6 +123,8 @@ public class Main {
         mixinRefMaps = ns.getList("mixinRefMaps");
         extraLibs = ns.getList("extraLibs");
         fabric = ns.getBoolean("fabric");
+        fabricEntryPoints = ns.get("fabricEntrypoints");
+        fabricEntryPointsClient = ns.get("fabricEntrypointsClient");
 
         path = System.getProperty("user.dir") + "/" + version;
 
@@ -130,7 +138,7 @@ public class Main {
             if(file.isNative()) {
                 continue;
             }
-            if(file.getDownloadedFile().getName().contains("lwjgl")) {
+            if(file.getDownloadedFile().getName().contains("lwjgl") && !file.getDownloadedFile().exists()) {
                 String newLWJGL = createLWJGL(file);
                 System.out.printf("Replacing %s with 3.3.3 Version.\n", file.getDownloadedFile().getName());
                 FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
@@ -146,7 +154,7 @@ public class Main {
         }
 
         if(extraLibs != null) {
-            libsBuilder.addAll(extraLibs);
+            libsBuilder.addAll(extraLibs.stream().map(File::new).toList());
         }
         settings.addVariable(LauncherVariables.CLASSPATH, libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)));
 
@@ -162,7 +170,7 @@ public class Main {
             settings.addVariable(LauncherVariables.CLASSPATH, newLibs.toString());
         }
 
-        if(mixinMods != null) {
+        if(mixinMods != null || fabric) {
             File outputDir = new File(path, "mixinOutput");
             boolean mixinsGenerated = outputDir.exists();
             if(!mixinsGenerated) {
@@ -180,12 +188,23 @@ public class Main {
                     list.add(target);
                     builder.command(list);
                 }
-                for (String lib : mixinMods) {
+
+                if(fabric) {
                     List<String> list = builder.command();
                     list.add("-m");
-                    list.add(lib);
+                    list.add(System.getProperty("user.dir") + "/libs/FabricMixinShim.jar");
                     builder.command(list);
                 }
+
+                if(mixinMods != null) {
+                    for (String lib : mixinMods) {
+                        List<String> list = builder.command();
+                        list.add("-m");
+                        list.add(lib);
+                        builder.command(list);
+                    }
+                }
+
                 for (String packages : mixinPackages) {
                     List<String> list = builder.command();
                     list.add("-p");
@@ -198,7 +217,7 @@ public class Main {
                 int i = 0;
                 while (process.isAlive()) {
                     if(i > 999999) {
-                        System.out.println("Mixin took too long, open an issue if it causes a problem.");
+                        System.out.println("Mixing took too long, open an issue if it causes a problem.");
                         process.destroy();
                         break;
                     }
@@ -208,43 +227,43 @@ public class Main {
                     }
                     i++;
                 }
+            }
 
-                List<String> classes = new ArrayList<>();
-                Files.walkFileTree(Path.of(path + "/mixinOutput"), new FileVisitor<>() {
-                    @Override
-                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                        return FileVisitResult.CONTINUE;
-                    }
+            List<String> classes = new ArrayList<>();
+            Files.walkFileTree(Path.of(path + "/mixinOutput"), new FileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    return FileVisitResult.CONTINUE;
+                }
 
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                        classes.add(Path.of(path + "/mixinOutput").relativize(file).toString());
-                        return FileVisitResult.CONTINUE;
-                    }
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    classes.add(Path.of(path + "/mixinOutput").relativize(file).toString());
+                    return FileVisitResult.CONTINUE;
+                }
 
-                    @Override
-                    public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-                        return FileVisitResult.CONTINUE;
-                    }
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                    return FileVisitResult.CONTINUE;
+                }
 
-                    @Override
-                    public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                        return FileVisitResult.CONTINUE;
-                    }
-                });
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
 
-                Map<String, String> env = new HashMap<>();
-                for(String target : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
-                    JarFile file = new JarFile(target);
+            Map<String, String> env = new HashMap<>();
+            for(String target : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
+                JarFile file = new JarFile(target);
 
-                    for(String clazz : classes) {
-                        ZipEntry entry = file.getEntry(clazz);
-                        if (entry != null) {
-                            URI uri = URI.create("jar:file:" + target);
+                for(String clazz : classes) {
+                    ZipEntry entry = file.getEntry(clazz);
+                    if (entry != null) {
+                        URI uri = URI.create("jar:file:" + target);
 
-                            try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
-                                Files.copy(Path.of(path + "/mixinOutput/" + clazz), zipfs.getPath(clazz), StandardCopyOption.REPLACE_EXISTING);
-                            }
+                        try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
+                            Files.copy(Path.of(path + "/mixinOutput/" + clazz), zipfs.getPath(clazz), StandardCopyOption.REPLACE_EXISTING);
                         }
                     }
                 }
@@ -253,6 +272,51 @@ public class Main {
             // Add mod to classpath
             for (String mod : mixinMods) {
                 settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + OS_SEPARATOR + mod);
+            }
+            settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/sponge-mixin-0.11.4+mixin.0.8.5.jar");
+        }
+
+        if(customJar != null && mixinMods != null)  {
+            URI uri = URI.create("jar:file:" + customJar);
+            Map<String, String> env = new HashMap<>();
+
+            try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
+                for(File mod : mixinMods.stream().map(File::new).toList()) {
+                    URI uri2 = URI.create("jar:file:" + mod);
+
+                    List<String> entries = new ArrayList<>();
+                    try (FileSystem modZipFs = FileSystems.newFileSystem(uri2, env)) {
+                        Files.walkFileTree(modZipFs.getPath("/assets/").toAbsolutePath(), new FileVisitor<>() {
+                            @Override
+                            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                                return FileVisitResult.CONTINUE;
+                            }
+
+                            @Override
+                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                                entries.add(file.toString());
+                                return FileVisitResult.CONTINUE;
+                            }
+
+                            @Override
+                            public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                                return FileVisitResult.CONTINUE;
+                            }
+
+                            @Override
+                            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                                return FileVisitResult.CONTINUE;
+                            }
+                        });
+
+                        for(String entry : entries) {
+                            if(!Files.exists(zipfs.getPath(entry).getParent())) {
+                                Files.createDirectories(zipfs.getPath(entry));
+                            }
+                            Files.copy(modZipFs.getPath(entry), zipfs.getPath(entry), StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    }
+                }
             }
         }
 
@@ -263,11 +327,20 @@ public class Main {
             settings.addVariable(LauncherVariables.AUTH_UUID, uuid);
         }
 
-        libsBuilder.add(new File(System.getProperty("user.dir"), "/libs/JFRSub-1.0-SNAPSHOT.jar"));
+        libsBuilder.add(new File(System.getProperty("user.dir"), "libs/JFRSub.jar"));
         MinecraftJavaRuntimeSetup.launch(settings, false, new File(graalvmInstall + "/bin/java" + OS_EXT));
         System.out.println("Waiting for Minecraft to close...");
         System.out.println("Generate a world, go to the end, leave, join a server.");
-        MinecraftLauncher.launch(settings, "-noverify -agentlib:native-image-agent=config-merge-dir=../configs/" + version);
+
+        String extraArgs = "";
+        if(fabricEntryPointsClient != null) {
+            extraArgs += " -Dfabric.entrypoints.client=" + fabricEntryPointsClient;
+        }
+        if(fabricEntryPoints != null) {
+            extraArgs += " -Dfabric.entrypoints=" + fabricEntryPoints;
+        }
+
+        MinecraftLauncher.launch(settings, "-noverify -agentlib:native-image-agent=config-merge-dir=../configs/" + version + extraArgs);
 
         File buildDir = new File(path, "native-build");
         buildDir.mkdirs();
@@ -275,9 +348,9 @@ public class Main {
         Process process;
         if(profileGuidedOptimizations) {
             process = startCompile(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)),
-                    path + "/native-build", "--pgo-instrument");
+                    path + "/native-build", extraArgs, "--pgo-instrument");
         } else {
-            process = startCompile(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)), path + "/native-build");
+            process = startCompile(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)), path + "/native-build", extraArgs);
         }
 
         while(process.isAlive()) {
@@ -319,7 +392,7 @@ public class Main {
     private static Process startCompile(String libs, String buildDir, String... extraArgs) throws IOException {
         ProcessBuilder builder = new ProcessBuilder();
         builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
-                "-H:ConfigurationFileDirectories=../configs/default,../configs/" + version, "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libs, "net.minecraft.client.main.Main", version);
+                "-H:ConfigurationFileDirectories=/configs/default,/configs/" + version, "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libs, "net.minecraft.client.main.Main", version);
         for(String arg : extraArgs) {
             List<String> commands = builder.command();
             commands.add(builder.command().size() - 4, arg);
