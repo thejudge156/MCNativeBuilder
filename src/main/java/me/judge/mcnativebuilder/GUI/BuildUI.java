@@ -59,7 +59,7 @@ public class BuildUI {
                             "--graalvm",
                             graalVM.getText()
                     });
-                } catch (IOException ex) {
+                } catch (Exception ex) {
                     throw new RuntimeException(ex);
                 }
             }

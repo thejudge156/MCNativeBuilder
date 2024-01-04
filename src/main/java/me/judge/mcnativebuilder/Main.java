@@ -1,5 +1,6 @@
 package me.judge.mcnativebuilder;
 
+import me.judge.mcnativebuilder.util.ClasspathUtil;
 import net.hycrafthd.minecraft_downloader.*;
 import net.hycrafthd.minecraft_downloader.library.DownloadableFile;
 import net.hycrafthd.minecraft_downloader.settings.LauncherVariables;
@@ -13,6 +14,7 @@ import net.sourceforge.argparse4j.inf.Namespace;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
@@ -20,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.jar.JarFile;
+import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 
@@ -58,7 +61,7 @@ public class Main {
     private static List<String> mixinPackages = new ArrayList<>();
     private static boolean fabric;
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
         ArgumentParser parser = ArgumentParsers.newFor("MCNativeBuilder").build()
                 .defaultHelp(true)
                 .description("Build Minecraft Native Images.");
@@ -175,12 +178,9 @@ public class Main {
             boolean mixinsGenerated = outputDir.exists();
             if(!mixinsGenerated) {
                 ProcessBuilder builder = new ProcessBuilder();
-                builder.command(System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/bin/Arbiter" + OS_EXT_BAT, "-o", path + "/mixinOutput", "--transformer",
+                File classPath = ClasspathUtil.shortenClasspath(System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/Arbiter-1.0.0-slim.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/Executor-1.0.0.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/jopt-simple-6.0-alpha-3.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/sponge-mixin-0.11.4+mixin.0.8.5.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/mixinextras-common-0.3.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/log4j-slf4j18-impl-2.17.1.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/log4j-core-2.17.1.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/log4j-api-2.17.1.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/guava-31.0.1-jre.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/asm-commons-9.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/asm-util-9.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/asm-analysis-9.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/asm-tree-9.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/commons-lang3-3.3.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/commons-io-2.11.0.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/gson-2.8.9.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/forgeflower-2.0.605.1.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/slf4j-api-1.8.0-beta4.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/failureaccess-1.0.1.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/jsr305-3.0.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/checker-qual-3.12.0.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/error_prone_annotations-2.7.1.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/j2objc-annotations-1.3.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/asm-9.2.jar" + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/annotations-20.1.0.jar", path, OS_SEPARATOR);
+                builder.command(graalvmInstall + "/bin/java" + OS_EXT, "-Dmixin.env.refMapRemappingFile=" + mixinRefMaps.stream().collect(Collectors.joining(OS_SEPARATOR)), "-classpath", classPath.getAbsolutePath(), "net.minecraftforge.ducker.Main", "-o", path + "/mixinOutput", "--transformer",
                         "MIXIN_METHOD_REMAPPER_PRIVATIZER", "--transformer", "ACCESSOR_DESYNTHESIZER", "--transformer", "--transformer", "OVERWRITE_FIXER");
-
-                if (mixinRefMaps != null) {
-                    builder.environment().put("JAVA_OPTS", "-Dmixin.env.refMapRemappingFile=" + mixinRefMaps.stream().collect(Collectors.joining(OS_SEPARATOR)));
-                }
 
                 for (String target : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
                     List<String> list = builder.command();
@@ -255,12 +255,14 @@ public class Main {
 
             Map<String, String> env = new HashMap<>();
             for(String target : settings.getVariable(LauncherVariables.CLASSPATH).split(OS_SEPARATOR)) {
-                JarFile file = new JarFile(target);
-
-                for(String clazz : classes) {
-                    ZipEntry entry = file.getEntry(clazz);
+                for (String clazz : classes) {
+                    clazz = clazz.replaceAll(Matcher.quoteReplacement("\\"), "/");
+                    ZipEntry entry;
+                    try (JarFile file = new JarFile(target)) {
+                        entry = file.getEntry(clazz);
+                    }
                     if (entry != null) {
-                        URI uri = URI.create("jar:file:" + target);
+                        URI uri = new URI("jar:file", new File(target).toURI().getPath(), null);
 
                         try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
                             Files.copy(Path.of(path + "/mixinOutput/" + clazz), zipfs.getPath(clazz), StandardCopyOption.REPLACE_EXISTING);
@@ -273,38 +275,38 @@ public class Main {
             for (String mod : mixinMods) {
                 settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + OS_SEPARATOR + mod);
             }
-            settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/lib/sponge-mixin-0.11.4+mixin.0.8.5.jar");
+            settings.addVariable(LauncherVariables.CLASSPATH, settings.getVariable(LauncherVariables.CLASSPATH) + OS_SEPARATOR + System.getProperty("user.dir") + "/libs/Arbiter-1.0.0/libs/Arbiter-1.0.0/lib/sponge-mixin-0.11.4+mixin.0.8.5.jar");
         }
 
         if(customJar != null && mixinMods != null)  {
-            URI uri = URI.create("jar:file:" + customJar);
+            URI uri = new URI("jar:file", new File(customJar).toURI().getPath(), null);
             Map<String, String> env = new HashMap<>();
 
             try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
                 for(File mod : mixinMods.stream().map(File::new).toList()) {
-                    URI uri2 = URI.create("jar:file:" + mod);
+                    URI uri2 = new URI("jar:file", mod.toURI().getPath(), null);
 
                     List<String> entries = new ArrayList<>();
                     try (FileSystem modZipFs = FileSystems.newFileSystem(uri2, env)) {
                         Files.walkFileTree(modZipFs.getPath("/assets/").toAbsolutePath(), new FileVisitor<>() {
                             @Override
-                            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                                 return FileVisitResult.CONTINUE;
                             }
 
                             @Override
-                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                                 entries.add(file.toString());
                                 return FileVisitResult.CONTINUE;
                             }
 
                             @Override
-                            public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                            public FileVisitResult visitFileFailed(Path file, IOException exc) {
                                 return FileVisitResult.CONTINUE;
                             }
 
                             @Override
-                            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                            public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
                                 return FileVisitResult.CONTINUE;
                             }
                         });
