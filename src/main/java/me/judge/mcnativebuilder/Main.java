@@ -49,6 +49,7 @@ public class Main {
     private static String version;
     private static String path;
     private static Boolean profileGuidedOptimizations;
+    private static String garbageCollector;
     private static String graalvmInstall;
     private static String authToken;
     private static String uuid;
@@ -66,7 +67,6 @@ public class Main {
                 .defaultHelp(true)
                 .description("Build Minecraft Native Images.");
         parser.addArgument("--version")
-                .choices("1.18.2", "1.19.0", "1.19.2", "1.19.4", "1.20.2", "1.20.4")
                 .setDefault("1.20.2")
                 .help("Version of Minecraft to compile");
         parser.addArgument("--accessToken")
@@ -79,6 +79,9 @@ public class Main {
                 .setDefault(false)
                 .type(Boolean.class)
                 .help("Whether or not to enable Profile-Guided-Optimizations.");
+        parser.addArgument("--gc")
+                .setDefault("serial")
+                .help("Garbage collector to use for the outputted image.");
         parser.addArgument("--graalvm")
                 .help("Where your graalvm sdk is.");
         parser.addArgument("--customJar")
@@ -117,6 +120,7 @@ public class Main {
         }
         version = ns.get("version");
         profileGuidedOptimizations = ns.getBoolean("pgos");
+        garbageCollector = ns.getString("gc");
         graalvmInstall = ns.get("graalvm");
         authToken = ns.get("accessToken");
         uuid = ns.get("uuid");
@@ -141,7 +145,7 @@ public class Main {
             if(file.isNative()) {
                 continue;
             }
-            if(file.getDownloadedFile().getName().contains("lwjgl") && !file.getDownloadedFile().exists()) {
+            if(file.getDownloadedFile().getName().contains("lwjgl")) {
                 String newLWJGL = createLWJGL(file);
                 System.out.printf("Replacing %s with 3.3.3 Version.\n", file.getDownloadedFile().getName());
                 FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
@@ -217,7 +221,7 @@ public class Main {
                 int i = 0;
                 while (process.isAlive()) {
                     if(i > 999999) {
-                        System.out.println("Mixing took too long, open an issue if it causes a problem.");
+                        System.out.println("Mixing took too long, open an issue if this causes a problem.");
                         process.destroy();
                         break;
                     }
@@ -349,18 +353,17 @@ public class Main {
 
         Process process;
         if(profileGuidedOptimizations) {
-            process = startCompile(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)),
-                    path + "/native-build", extraArgs, "--pgo-instrument");
+            File classPath = ClasspathUtil.shortenClasspathGraal(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)), path, OS_SEPARATOR);
+            process = startCompile(classPath.getAbsolutePath(),
+                    path + "/native-build", "--pgo-instrument", "--gc=" + garbageCollector);
         } else {
-            process = startCompile(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)), path + "/native-build", extraArgs);
+            File classPath = ClasspathUtil.shortenClasspathGraal(libsBuilder.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)), path, OS_SEPARATOR);
+            process = startCompile(classPath.getAbsolutePath(),
+                    path + "/native-build", "--gc=" + garbageCollector);
         }
 
         while(process.isAlive()) {
             String output = process.inputReader().readLine();
-            if(output != null) {
-                System.out.println(output);
-            }
-            output = process.errorReader().readLine();
             if(output != null) {
                 System.out.println(output);
             }
@@ -394,7 +397,7 @@ public class Main {
     private static Process startCompile(String libs, String buildDir, String... extraArgs) throws IOException {
         ProcessBuilder builder = new ProcessBuilder();
         builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
-                "-H:ConfigurationFileDirectories=/configs/default,/configs/" + version, "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libs, "net.minecraft.client.main.Main", version);
+                "-H:ConfigurationFileDirectories=" + System.getProperty("user.dir") + "/defaultConfig," + System.getProperty("user.dir") + "/" + version + "/configs/" + version, "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libs, "net.minecraft.client.main.Main", version);
         for(String arg : extraArgs) {
             List<String> commands = builder.command();
             commands.add(builder.command().size() - 4, arg);

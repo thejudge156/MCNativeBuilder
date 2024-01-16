@@ -34,4 +34,30 @@ public class ClasspathUtil {
 
         return newClasspathFile;
     }
+
+    // Damnit graal
+    public static File shortenClasspathGraal(String files, String rootDir, String sep) throws IOException {
+        File newClasspathFile = new File(rootDir, "Classpath.jar");
+        if(!newClasspathFile.exists()) {
+            newClasspathFile.createNewFile();
+        }
+
+        String filePaths = files.replaceAll(sep, " ").replaceAll(Matcher.quoteReplacement("\\"), "/");
+
+        final Manifest manifest = new Manifest();
+        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        manifest.getMainAttributes().put(Attributes.Name.CLASS_PATH, filePaths);
+
+        JarOutputStream output = new JarOutputStream(new FileOutputStream(newClasspathFile), manifest);
+
+        ZipEntry manifestFile = new ZipEntry("META-INF/");
+        output.putNextEntry(manifestFile);
+
+        output.flush();
+        output.closeEntry();
+
+        output.close();
+
+        return newClasspathFile;
+    }
 }
