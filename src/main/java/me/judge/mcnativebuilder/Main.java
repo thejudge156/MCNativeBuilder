@@ -324,7 +324,11 @@ public class Main {
             if(newCustomJar.getFile().exists()) {
                 newCustomJar.getFile().delete();
             }
-            newCustomJar.createZipFileFromFolder(path + "/" + version + "-extracted", new ZipParameters(), false, 0);
+
+            File sourceFolder = new File(path + "/" + version + "-extracted/");
+            ZipParameters param = new ZipParameters();
+            param.setIncludeRootFolder(false);
+            newCustomJar.createZipFileFromFolder(sourceFolder, param, false, -1);
 
             if(customJar != null) {
                 String libs = settings.getVariable(LauncherVariables.CLASSPATH);
@@ -427,7 +431,7 @@ public class Main {
         }
 
         while(process.isAlive()) {
-            String output = process.inputReader().readLine();
+            String output = process.inputReader()   .readLine();
             if(output != null) {
                 System.out.println(output);
             }
@@ -447,20 +451,18 @@ public class Main {
             }
 
             process = startCompile(libsBuilder.toString(), "./native-build", "--pgo=../install/default.iprof");
-            String output = process.inputReader().readLine();
-            if(output != null) {
-                System.out.println(output);
-            }
-            output = process.errorReader().readLine();
-            if(output != null) {
-                System.out.println(output);
+            while(process.isAlive()) {
+                String output = process.errorReader().readLine();
+                if (output != null) {
+                    System.out.println(output);
+                }
             }
         }
     }
 
     private static Process startCompile(String libs, String buildDir, String... extraArgs) throws IOException {
         ProcessBuilder builder = new ProcessBuilder();
-        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "-Djava.awt.headless=false", "-H:+UnlockExperimentalVMOptions", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
+        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "-Djava.awt.headless=false", "-H:+AddAllCharsets", "-H:IncludeResources=.*",
                 "-H:ConfigurationFileDirectories=" + System.getProperty("user.dir") + "/defaultConfig," + System.getProperty("user.dir") + "/" + version + "/configs/" + version, "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "--enable-http", "--enable-https", "--no-fallback", "-cp", libs, "net.minecraft.client.main.Main", version);
         for(String arg : extraArgs) {
             List<String> commands = builder.command();
