@@ -1,0 +1,15 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    maven {
+        url = "https://maven.fabricmc.net/"
+    }
+    mavenCentral()
+}
+
+dependencies {
+    implementation group: 'org.graalvm.nativeimage', name: 'svm', version: '24.0.2'
+    implementation "net.fabricmc:sponge-mixin:0.15.0+mixin.0.8.7"
+}
