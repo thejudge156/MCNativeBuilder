@@ -72,12 +72,22 @@ public class Main {
         }
 
         List<String> processors = ns.getList("processors");
-        new Main(ns.getString("gc"), ns.getString("version"), ns.getString("graalvm"), processors);
+        initInstance(ns.getString("gc"), ns.getString("version"), ns.getString("graalvm"), processors);
         LOGGER.info("Initialized MCNativeBuilder...");
-        instance.start();
+        getInstance().start();
     }
 
-    public Main(String gc, String version, String graalvmInstall, List<String> processors) {
+    public static void initInstance(String gc, String version, String graalvmInstall, List<String> processors) {
+        if(instance == null) {
+            instance = new Main(gc, version, graalvmInstall, processors);
+        }
+    }
+
+    public static Main getInstance() {
+        return instance;
+    }
+
+    private Main(String gc, String version, String graalvmInstall, List<String> processors) {
         instance = this;
         this.gc = gc;
         this.version = version;
