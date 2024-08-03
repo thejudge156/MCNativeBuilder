@@ -131,12 +131,9 @@ public class Main {
             try(InputStream stream = Main.class.getResourceAsStream("extraLibs/mc-lib.jar")) {
                 if(stream != null) {
                     FileOutputStream fos = new FileOutputStream(mclibFile);
-                    byte[] buffer = new byte[1024];
-                    while (stream.read() != -1) {
-                        stream.read(buffer);
-                        fos.write(buffer);
-                        fos.flush();
-                    }
+                    byte[] buffer = stream.readAllBytes();
+                    fos.write(buffer);
+                    fos.flush();
                     fos.close();
                 }
             } catch (IOException e) {
