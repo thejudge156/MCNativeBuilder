@@ -1,4 +1,7 @@
+![banner](https://github.com/thejudge156/MCNativeBuilder/blob/refactor/MCNativeBanner.png)
+
 # MCNativeBuilder
+
 ### A tool for building native Minecraft images utilizing [GraalVM](https://github.com/oracle/graal). This project is still in alpha, expect bugs and major changes!
 
 ## Supporting:
