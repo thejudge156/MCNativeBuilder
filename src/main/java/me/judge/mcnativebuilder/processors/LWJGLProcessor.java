@@ -79,12 +79,15 @@ public class LWJGLProcessor implements IProcessor {
         }
         sb.append(baseName).append("-").append(parts[0]).append("-");
         for (int i = 1; i < parts.length; i++) {
-            sb.append(parts[i]);
+            sb.append(parts[i].replace(".jar", ""));
+            if(parts[i].contains(".jar") && System.getProperty("os.arch").equals("aarch64")) {
+                sb.append("-arm64");
+            }
             if (i < parts.length - 1) {
                 sb.append("-");
             }
         }
-        if (!parts[parts.length - 1].endsWith(".jar")) {
+        if (!sb.toString().endsWith(".jar")) {
             sb.append(".jar");
         }
         return sb.toString();
