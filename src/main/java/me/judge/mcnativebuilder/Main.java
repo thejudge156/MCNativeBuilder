@@ -21,18 +21,15 @@ public class Main {
         if(System.getProperty("os.name").contains("Windows")) {
             OS_EXT = ".exe";
             OS_EXT_SHELL = ".cmd";
-            OS_SEPARATOR = ";";
         } else {
             OS_EXT = "";
             OS_EXT_SHELL = "";
-            OS_SEPARATOR = ":";
         }
     }
     public static final Logger LOGGER = Logger.getLogger(Main.class.getName());
 
     public static String OS_EXT;
     public static String OS_EXT_SHELL;
-    public static String OS_SEPARATOR;
 
     public static String homePath = System.getProperty("user.dir");
     public static File installDir = new File(homePath, "install");
@@ -52,7 +49,7 @@ public class Main {
                 .defaultHelp(true)
                 .description("Build Minecraft Native Images.");
         parser.addArgument("--version")
-                .setDefault("1.20.6")
+                .setDefault("1.21.5")
                 .help("Version of Minecraft to download and compile");
         parser.addArgument("--graalvm")
                 .help("Where your graalvm sdk is.");
@@ -144,7 +141,7 @@ public class Main {
         libs.add(mcSettings.getClientJarFile());
 
         LOGGER.info("Logging in...");
-        MinecraftAuthenticator.launch(mcSettings, accFile, "web", false);
+        MinecraftAuthenticator.launch(mcSettings, accFile, "console", true);
         LOGGER.info("Logged in...");
         LOGGER.info("Launching MC with tracing agent, please follow the instructions in the README to prevent runtime crashes");
         MinecraftJavaRuntimeSetup.launch(mcSettings, false, new File(graalvmInstall, "bin/java"));
@@ -171,6 +168,8 @@ public class Main {
                     LOGGER.severe(errors.readLine());
                 }
             }
+            errors.close();
+            info.close();
         } catch (IOException e) {
             LOGGER.severe("Error while compiling! " + e.getMessage());
         }
@@ -180,7 +179,7 @@ public class Main {
     private Process startCompile(List<File> classPath, String... extraArgs) throws IOException {
         ProcessBuilder builder = new ProcessBuilder();
         builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "-H:ConfigurationFileDirectories=" + installDir + "/configs/" + version, "-cp",
-                classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(OS_SEPARATOR)), "--gc=" + gc, "net.minecraft.client.main.Main", version);
+                classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)), "--gc=" + gc, "net.minecraft.client.main.Main", version);
         for(String arg : extraArgs) {
             List<String> commands = builder.command();
             commands.add(builder.command().size(), arg);
