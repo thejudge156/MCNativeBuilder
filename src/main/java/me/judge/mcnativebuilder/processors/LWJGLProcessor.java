@@ -1,33 +1,34 @@
 package me.judge.mcnativebuilder.processors;
 
 import me.judge.mcnativebuilder.Main;
-import net.hycrafthd.minecraft_downloader.library.DownloadableFile;
-import net.hycrafthd.minecraft_downloader.settings.ProvidedSettings;
-import net.hycrafthd.minecraft_downloader.util.FileUtil;
+import org.angelauramc.judgelib.installer.JudgeLibInstall;
+import org.angelauramc.judgelib.util.ConnectionUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class LWJGLProcessor implements IProcessor {
     private static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
 
     @Override
-    public List<File> processClasspath(ProvidedSettings settings) {
+    public List<File> processClasspath(JudgeLibInstall install) {
         List<File> files = new ArrayList<>();
         try {
-            for (DownloadableFile file : settings.getGeneratedSettings().getDownloadableFiles()) {
-                if (file.isNative()) {
-                    continue;
-                }
-                if (file.getDownloadedFile().getName().contains("lwjgl")) {
-                    String newLWJGL = createLWJGL(file);
-                    Main.LOGGER.fine("Replacing %s " + file.getDownloadedFile().getName() + " with 3.3.3 Version.\n");
-                    FileUtil.downloadFile(LWJGL_DOWNLOAD + newLWJGL, file.getDownloadedFile(), null);
+            for (String file : install.classpath.split(File.pathSeparator)) {
+                if (file.contains("lwjgl")) {
+                    String pattern = Pattern.quote(File.separator);
+                    String[] paths = file.split(pattern);
+                    String newLWJGL = createLWJGL(paths[paths.length - 1]);
+                    Main.LOGGER.fine("Replacing " + file + " with 3.3.3 Version.\n");
+                    ConnectionUtil.downloadFile(URI.create(LWJGL_DOWNLOAD + newLWJGL), Path.of(file));
                 }
 
-                files.add(file.getDownloadedFile());
+                files.add(new File(file));
             }
         } catch (IOException e) {
             Main.LOGGER.severe("LWJGL Processing failed! " + e.getMessage());
@@ -37,23 +38,22 @@ public class LWJGLProcessor implements IProcessor {
     }
 
     @Override
-    public List<String> preBuild(ProvidedSettings settings) {
+    public List<String> preBuild(JudgeLibInstall settings) {
         // noop
         return List.of();
     }
 
     @Override
-    public void postBuild(ProvidedSettings settings) {
+    public void postBuild(JudgeLibInstall settings) {
         // noop
     }
 
-    private String createLWJGL(DownloadableFile file) {
-        String fileName = file.getDownloadedFile().getName();
+    private String createLWJGL(String fileName) {
         String[] nameParts = fileName.split("-");
         String baseName = nameParts[0];
 
-        boolean isNatives = file.getPath().contains("natives");
         boolean matchesLWJGLPattern = fileName.matches("lwjgl-3\\.([0-9])\\.([0-9]).*");
+        boolean isNatives = fileName.contains("natives");
 
         if (matchesLWJGLPattern) {
             if (isNatives) {
