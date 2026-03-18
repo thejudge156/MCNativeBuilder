@@ -3,12 +3,12 @@ package me.judge.mcnativebuilder.processors;
 import me.judge.mcnativebuilder.Main;
 import org.angelauramc.judgelib.installer.JudgeLibInstall;
 import org.angelauramc.judgelib.util.ConnectionUtil;
+import org.angelauramc.judgelib.util.SemVer;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -17,24 +17,25 @@ public class LWJGLProcessor implements IProcessor {
 
     @Override
     public List<File> processClasspath(JudgeLibInstall install) {
-        List<File> files = new ArrayList<>();
         try {
             for (String file : install.classpath.split(File.pathSeparator)) {
                 if (file.contains("lwjgl")) {
                     String pattern = Pattern.quote(File.separator);
                     String[] paths = file.split(pattern);
                     String newLWJGL = createLWJGL(paths[paths.length - 1]);
+
+                    if(newLWJGL.equals(paths[paths.length - 1]))
+                        continue;
+
                     Main.LOGGER.fine("Replacing " + file + " with 3.3.3 Version.\n");
                     ConnectionUtil.downloadFile(URI.create(LWJGL_DOWNLOAD + newLWJGL), Path.of(file));
                 }
-
-                files.add(new File(file));
             }
         } catch (IOException e) {
             Main.LOGGER.severe("LWJGL Processing failed! " + e.getMessage());
         }
 
-        return files;
+        return List.of();
     }
 
     @Override
@@ -54,14 +55,25 @@ public class LWJGLProcessor implements IProcessor {
 
         boolean matchesLWJGLPattern = fileName.matches("lwjgl-3\\.([0-9])\\.([0-9]).*");
         boolean isNatives = fileName.contains("natives");
+        SemVer desired =  new SemVer("3.3.3");
 
         if (matchesLWJGLPattern) {
+            SemVer ver = new SemVer(nameParts[1]);
+            if(ver.greaterThan(desired)) {
+                return fileName;
+            }
+
             if (isNatives) {
                 return formatLWJGLName(baseName, true, nameParts[2], nameParts[3]);
             } else {
                 return baseName + "/" + baseName + ".jar";
             }
         } else {
+            SemVer ver = new SemVer(nameParts[2]);
+            if(ver.greaterThan(desired)) {
+                return fileName;
+            }
+
             if (isNatives) {
                 return formatLWJGLName(baseName, false, nameParts[1], nameParts[3], nameParts[4]);
             } else {
