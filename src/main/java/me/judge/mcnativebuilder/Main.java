@@ -281,10 +281,10 @@ public class Main {
         ProcessBuilder builder = new ProcessBuilder();
 
         File argFile = new File(buildDir, "command.txt");
+        if(!argFile.getParentFile().exists()) {
+            argFile.getParentFile().mkdirs();
+        }
         if(argFile.exists()) {
-            if(!argFile.getParentFile().exists()) {
-                argFile.getParentFile().mkdir();
-            }
             argFile.delete();
             argFile.createNewFile();
         }
