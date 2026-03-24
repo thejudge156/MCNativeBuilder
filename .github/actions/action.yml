@@ -13,6 +13,8 @@ jobs:
           distribution: 'liberica'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           native-image-job-reports: 'true'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582
       - name: Set up swap space
         if: runner.os == 'Linux'
         uses: pierotofy/set-swap-space@v1.0
@@ -41,6 +43,8 @@ jobs:
           distribution: 'liberica'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           native-image-job-reports: 'true'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582
       - name: Checkout
         uses: actions/checkout@v4
       - name: Build MCNativeBuilder
