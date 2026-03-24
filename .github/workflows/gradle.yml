@@ -52,7 +52,7 @@ jobs:
           .\gradlew.bat build
       - name: Build 1.21.11
         run: |
-          $JAVA_HOME\bin\java -jar build\MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11
+          $JAVA_HOME/bin/java -jar build\MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11
       - name: Zip Release for Windows
         run: |
           Compress-Archive -Path install\1.21.11\* -DestinationPath ${{ github.workspace }}\1.21.11.zip
