@@ -1,0 +1,54 @@
+name: Build MCNative 1.21.4
+author: TheJudge156
+on:
+  workflow_dispatch:
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'liberica'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      - name: Set up swap space
+        if: runner.os == 'Linux'
+        uses: pierotofy/set-swap-space@v1.0
+        with:
+          swap-size-gb: 15
+      - name: Setup Build Deps
+        run: "sudo apt install zip"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build MCNativeBuilder
+        run: |
+          ./gradlew.sh build
+      - name: Build 1.21.11
+        run: |
+          $JAVA_HOME/bin/java -jar build/MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11
+      - name: Zip Release
+        run: "cd ${{ github.workspace }}; zip 1.21.11.zip -r install/1.21.11"
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'liberica'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build MCNativeBuilder
+        run: |
+          .\gradlew.bat build
+      - name: Build 1.21.11
+        run: |
+          $JAVA_HOME\bin\java -jar build\MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11
+      - name: Zip Release for Windows
+        run: |
+          Compress-Archive -Path install\1.21.11\* -DestinationPath ${{ github.workspace }}\1.21.11.zip
