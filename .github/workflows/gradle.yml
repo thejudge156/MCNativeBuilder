@@ -29,7 +29,7 @@ jobs:
           ./gradlew build
       - name: Build 1.21.11
         run: |
-          $JAVA_HOME/bin/java -jar build/libs/MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11
+          $JAVA_HOME/bin/java -jar build/libs/MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11 --dry-run true
       - name: Zip Release
         run: "cd ${{ github.workspace }}; zip 1.21.11.zip -r install/1.21.11"
 
@@ -53,7 +53,7 @@ jobs:
       - name: Build 1.21.11
         shell: bash
         run: |
-          $JAVA_HOME/bin/java -jar build/libs/MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11
+          $JAVA_HOME/bin/java -jar build/libs/MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11 --dry-run true
       - name: Zip Release for Windows
         run: |
           Compress-Archive -Path install\1.21.11\* -DestinationPath ${{ github.workspace }}\1.21.11.zip
