@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -54,6 +55,7 @@ public class Main {
     private static String mainClass;
     private static String buildMode;
     private static boolean fabric;
+    private static boolean experimentalLWJGLPatch;
     private static boolean dryRun;
     public static String[] extraBuildArgs;
     private static MinecraftVersion mcVersion;
@@ -90,6 +92,10 @@ public class Main {
         parser.addArgument("--extra-build-args")
                 .setDefault("")
                 .help("Additional arguments for the native-image builder.");
+        parser.addArgument("--experimental-lwjgl")
+                .setDefault(false)
+                .type(Boolean.TYPE)
+                .help("Patches LWJGL's JNI class to use C Functions instead of JNI");
         parser.addArgument("--main-class")
                 .setDefault("net.minecraft.client.main.Main")
                 .help("Specify native image main class");
@@ -111,6 +117,7 @@ public class Main {
         gc = ns.getString("gc");
         version = ns.getString("version");
         graalvmInstall = ns.getString("graalvm");
+        experimentalLWJGLPatch = ns.getBoolean("experimental_lwjgl");
         fabric = ns.getBoolean("fabric");
         extraBuildArgs = ns.getString("extra_build_args").split("\\?");
         mainClass = ns.getString("main_class");
@@ -164,7 +171,7 @@ public class Main {
 
             LOGGER.info("Built MC Classpath...");
 
-            List<File> libs = new ArrayList<>(Arrays.stream(install.classpath.split(File.pathSeparator)).map(File::new).toList());
+            List<File> libs = new CopyOnWriteArrayList<>(Arrays.stream(install.classpath.split(File.pathSeparator)).map(File::new).toList());
             for (IProcessor processor : processors) {
                 List<File> processedLibs = processor.processClasspath(install);
                 if (processedLibs != null) {
@@ -172,10 +179,11 @@ public class Main {
                 }
             }
 
+            List<String> extraArgs = new ArrayList<>();
             LOGGER.info("Injecting MCNativeTools-9.8 into Classpath");
             File mclibFile = new File(installDir, "MCNativeTools-9.8.jar");
             if (!mclibFile.exists()) {
-                try (InputStream stream = Main.class.getResourceAsStream("extraLibs/MCNativeTools-9.8.jar")) {
+                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/MCNativeTools-9.8.jar")) {
                     if (stream != null) {
                         FileOutputStream fos = new FileOutputStream(mclibFile);
                         byte[] buffer = stream.readAllBytes();
@@ -200,7 +208,6 @@ public class Main {
                 JudgeLibAPI.getInstance().launchInstall(install, account, new String[0], new String[]{"-agentlib:native-image-agent=config-merge-dir=" + buildDir});
             }
 
-            List<String> extraArgs = new ArrayList<>();
             for (IProcessor processor : processors) {
                 List<String> tempExtraArgs = processor.preBuild(install);
                 if (tempExtraArgs != null) {
@@ -209,6 +216,31 @@ public class Main {
             }
             if(shared)
                 extraArgs.add("--shared");
+
+            if(experimentalLWJGLPatch) {
+                LOGGER.info("Injecting LWJGLPatch-9.8 into Classpath");
+                libs.stream().filter((f) -> {
+                    if(f == null) {
+                        return false;
+                    }
+                    return f.getAbsolutePath().contains("org" + File.separator + "ow2" + File.separator + "asm");
+                }).forEach(libs::remove);
+                File lwjglPatch = new File(installDir, "LWJGLPatch-9.8.jar");
+                if (!lwjglPatch.exists()) {
+                    try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/LWJGLPatch-9.8.jar")) {
+                        if (stream != null) {
+                            FileOutputStream fos = new FileOutputStream(lwjglPatch);
+                            byte[] buffer = stream.readAllBytes();
+                            fos.write(buffer);
+                            fos.flush();
+                            fos.close();
+                        }
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                extraArgs.add("-J-javaagent:" + lwjglPatch.getAbsolutePath());
+            }
 
             if(fabric) {
                 mainClass = "me.judge.fabric.FabricMain";
@@ -250,6 +282,9 @@ public class Main {
 
         File argFile = new File(buildDir, "command.txt");
         if(argFile.exists()) {
+            if(!argFile.getParentFile().exists()) {
+                argFile.getParentFile().mkdirs();
+            }
             argFile.delete();
             argFile.createNewFile();
         }
