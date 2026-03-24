@@ -283,7 +283,7 @@ public class Main {
         File argFile = new File(buildDir, "command.txt");
         if(argFile.exists()) {
             if(!argFile.getParentFile().exists()) {
-                argFile.getParentFile().mkdirs();
+                argFile.getParentFile().mkdir();
             }
             argFile.delete();
             argFile.createNewFile();
