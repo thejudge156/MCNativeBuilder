@@ -1,5 +1,4 @@
-name: Build MCNative 1.21.4
-author: TheJudge156
+name: Build MCNative 1.21.11
 on:
   workflow_dispatch:
 jobs:
