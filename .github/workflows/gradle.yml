@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Build MCNativeBuilder
         run: |
-          ./gradlew.sh build
+          ./gradlew build
       - name: Build 1.21.11
         run: |
           $JAVA_HOME/bin/java -jar build/MCNativeBuilder-1.0-SNAPSHOT-all.jar --graalvm $JAVA_HOME --version 1.21.11
