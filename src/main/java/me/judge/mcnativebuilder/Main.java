@@ -60,7 +60,7 @@ public class Main {
     public static String[] extraBuildArgs;
     private static MinecraftVersion mcVersion;
 
-    private static List<IProcessor> processors = new ArrayList<>();
+    private static final List<IProcessor> processors = new ArrayList<>();
 
     public static void main(String[] args) {
         ArgumentParser parser = ArgumentParsers.newFor("MCNativeBuilder").build()
@@ -293,10 +293,10 @@ public class Main {
 
         for(String arg : List.of("-H:ConfigurationFileDirectories=" + buildDir, "-cp",
                 classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)), "--gc=" + gc,
-                "--enable-url-protocols=https,http", "--future-defaults=all",
+                "--enable-url-protocols=https,http",
                 "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-g",
                 "-H:IncludeResources=data/.*", "-H:IncludeResources=assets/.*", "-H:+AddAllCharsets", "-H:+IncludeAllLocales",
-                "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl", "-H:+SharedArenaSupport")) {
+                "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl")) {
             writer.write(" ");
             writer.write(arg);
         }
