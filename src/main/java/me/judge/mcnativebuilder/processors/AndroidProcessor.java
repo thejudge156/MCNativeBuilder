@@ -30,6 +30,7 @@ public class AndroidProcessor implements IProcessor {
                         "-H:-UseContainerSupport",
                         "-H:-UseCAPCache",
                         "-H:+NewCAPCache",
+                        "-H:-CheckToolchain",
                         "-Dsvm.platform=org.graalvm.nativeimage.Platform$ANDROID_AARCH64",
                         "-H:-ForeignAPISupport",
                         "--native-compiler-options=-I" + System.getenv("ANDROID_NDK") + "/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/aarch64-linux-android",
