@@ -27,7 +27,7 @@ public class AndroidProcessor implements IProcessor {
             capCacheFolder.mkdirs();
             try {
 
-                Process process = Main.startCompile(classpath, Main.buildDir, "Ob", "serial",
+                Process process = Main.startCompile(classpath, Main.buildDir, "b", "serial",
                         "-H:CAPCacheDir=" + capCacheFolder,
                         "-H:-UseContainerSupport",
                         "-H:-UseCAPCache",
