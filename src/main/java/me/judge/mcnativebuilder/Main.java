@@ -1,6 +1,7 @@
 package me.judge.mcnativebuilder;
 
 import com.microsoft.aad.msal4j.DeviceCode;
+import me.judge.mcnativebuilder.processors.AndroidProcessor;
 import me.judge.mcnativebuilder.processors.FabricProcessor;
 import me.judge.mcnativebuilder.processors.IProcessor;
 import me.judge.mcnativebuilder.processors.LWJGLProcessor;
@@ -55,6 +56,7 @@ public class Main {
     private static String mainClass;
     private static String buildMode;
     private static boolean fabric;
+    private static boolean android;
     private static boolean experimentalLWJGLPatch;
     private static boolean dryRun;
     public static String[] extraBuildArgs;
@@ -96,6 +98,10 @@ public class Main {
                 .setDefault(false)
                 .type(Boolean.TYPE)
                 .help("Patches LWJGL's JNI class to use C Functions instead of JNI");
+        parser.addArgument("--android")
+                .setDefault(false)
+                .type(Boolean.TYPE)
+                .help("Builds a SO library for Android, see Wiki");
         parser.addArgument("--main-class")
                 .setDefault("net.minecraft.client.main.Main")
                 .help("Specify native image main class");
@@ -119,6 +125,7 @@ public class Main {
         graalvmInstall = ns.getString("graalvm");
         experimentalLWJGLPatch = ns.getBoolean("experimental_lwjgl");
         fabric = ns.getBoolean("fabric");
+        android = ns.getBoolean("android");
         extraBuildArgs = ns.getString("extra_build_args").split("\\?");
         mainClass = ns.getString("main_class");
         shared = ns.getBoolean("shared");
@@ -128,6 +135,9 @@ public class Main {
         LOGGER.info("Initialized MCNativeBuilder...");
         if(Main.fabric) {
             Main.processors.add(new FabricProcessor());
+        }
+        if(Main.android) {
+            Main.processors.add(new AndroidProcessor());
         }
 
         JudgeLibAPI api = JudgeLibAPI.getInstance();
@@ -208,15 +218,6 @@ public class Main {
                 JudgeLibAPI.getInstance().launchInstall(install, account, new String[0], new String[]{"-agentlib:native-image-agent=config-merge-dir=" + buildDir});
             }
 
-            for (IProcessor processor : processors) {
-                List<String> tempExtraArgs = processor.preBuild(install);
-                if (tempExtraArgs != null) {
-                    extraArgs.addAll(tempExtraArgs);
-                }
-            }
-            if(shared)
-                extraArgs.add("--shared");
-
             if(experimentalLWJGLPatch) {
                 LOGGER.info("Injecting LWJGLPatch-9.8 into Classpath");
                 libs.stream().filter((f) -> {
@@ -251,11 +252,20 @@ public class Main {
                 });
             }
 
+            for (IProcessor processor : processors) {
+                List<String> tempExtraArgs = processor.preBuild(install, libs);
+                if (tempExtraArgs != null) {
+                    extraArgs.addAll(tempExtraArgs);
+                }
+            }
+            if(shared)
+                extraArgs.add("--shared");
+
             extraArgs.addAll(List.of(extraBuildArgs));
 
             LOGGER.info("Building Native Image...");
             try {
-                Process process = startCompile(libs, extraArgs.toArray(new String[0]));
+                Process process = startCompile(libs, buildDir, buildMode, gc, extraArgs.toArray(new String[0]));
                 BufferedReader errors = process.errorReader();
                 BufferedReader info = process.inputReader();
                 while (process.isAlive()) {
@@ -277,7 +287,7 @@ public class Main {
         }
     }
 
-    private static Process startCompile(List<File> classPath, String... extraArgs) throws IOException {
+    public static Process startCompile(List<File> classPath, File buildDir, String buildMode, String gc, String... extraArgs) throws IOException {
         ProcessBuilder builder = new ProcessBuilder();
 
         File argFile = new File(buildDir, "command.txt");
@@ -301,9 +311,8 @@ public class Main {
             writer.write(arg);
         }
 
-        // TODO: Arm
         writer.write(" ");
-        writer.write("-march=x86-64-v2");
+        writer.write("-march=compatibility");
 
         if(buildMode.equals("pgoi")) {
             writer.write(" ");

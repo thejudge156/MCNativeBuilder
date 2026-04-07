@@ -39,7 +39,7 @@ public class LWJGLProcessor implements IProcessor {
     }
 
     @Override
-    public List<String> preBuild(JudgeLibInstall settings) {
+    public List<String> preBuild(JudgeLibInstall settings, List<File> classPath) {
         // noop
         return List.of();
     }
@@ -55,7 +55,7 @@ public class LWJGLProcessor implements IProcessor {
 
         boolean matchesLWJGLPattern = fileName.matches("lwjgl-3\\.([0-9])\\.([0-9]).*");
         boolean isNatives = fileName.contains("natives");
-        SemVer desired =  new SemVer("3.3.3");
+        SemVer desired = new SemVer("3.3.3");
 
         if (matchesLWJGLPattern) {
             SemVer ver = new SemVer(nameParts[1]);

@@ -33,7 +33,7 @@ public class FabricProcessor implements IProcessor{
     }
 
     @Override
-    public List<String> preBuild(JudgeLibInstall settings) {
+    public List<String> preBuild(JudgeLibInstall settings, List<File> classpath) {
         ArrayList<String> list = new ArrayList<>();
         list.add("--initialize-at-run-time=net.fabricmc.fabric");
         list.add("--features=me.judge.fabric.FabricFeature");
