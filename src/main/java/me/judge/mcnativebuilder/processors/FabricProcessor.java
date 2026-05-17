@@ -15,7 +15,7 @@ public class FabricProcessor implements IProcessor{
     public List<File> processClasspath(JudgeLibInstall settings) {
         for (String file : settings.classpath.split(File.pathSeparator)) {
             if (file.contains("sponge-mixin")) {
-                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/sponge-mixin-0.17.0.jar")) {
+                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/sponge-mixin-0.17.3.jar")) {
                     if (stream != null) {
                         FileOutputStream fos = new FileOutputStream(file);
                         byte[] buffer = stream.readAllBytes();

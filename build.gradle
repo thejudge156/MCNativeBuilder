@@ -31,7 +31,7 @@ dependencies {
     shadow(implementation("blank:judgelib:0.1.0"))
     extraLibs(implementation("blank:MCNativeTools:9.8"))
     extraLibs(implementation("blank:LWJGLPatch:9.8"))
-    extraLibs(implementation("blank:sponge-mixin:0.17.0"))
+    extraLibs(implementation("blank:sponge-mixin:0.17.3"))
 
     testImplementation platform('org.junit:junit-bom:5.9.1')
     testImplementation 'org.junit.jupiter:junit-jupiter'
