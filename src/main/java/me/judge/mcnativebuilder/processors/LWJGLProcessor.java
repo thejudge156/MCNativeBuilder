@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 
 public class LWJGLProcessor implements IProcessor {
     private static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
+    private boolean isFFMCapable;
 
     @Override
     public List<File> processClasspath(JudgeLibInstall install) {
@@ -40,7 +41,10 @@ public class LWJGLProcessor implements IProcessor {
 
     @Override
     public List<String> preBuild(JudgeLibInstall settings, List<File> classPath) {
-        // noop
+        // Need to generate the method handles at build-time if LWJGL is ffm capable
+        if(isFFMCapable)
+            return List.of("--features=me.judge.lwjgl.LWJGL34Feature");
+
         return List.of();
     }
 
@@ -56,10 +60,14 @@ public class LWJGLProcessor implements IProcessor {
         boolean matchesLWJGLPattern = fileName.matches("lwjgl-3\\.([0-9])\\.([0-9]).*");
         boolean isNatives = fileName.contains("natives");
         SemVer desired = new SemVer("3.3.3");
+        SemVer ffmCapable = new SemVer("3.4.0");
 
         if (matchesLWJGLPattern) {
             SemVer ver = new SemVer(nameParts[1]);
             if(ver.greaterThan(desired)) {
+                if(ver.greaterThan(ffmCapable)) {
+                    isFFMCapable = true;
+                }
                 return fileName;
             }
 
