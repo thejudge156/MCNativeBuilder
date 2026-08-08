@@ -40,7 +40,7 @@ public class LWJGLProcessor implements IProcessor {
     }
 
     @Override
-    public List<String> preBuild(JudgeLibInstall settings, List<File> classPath) {
+    public List<String> preBuild(JudgeLibInstall settings, List<File> classPath, boolean appLayer) {
         // Need to generate the method handles at build-time if LWJGL is ffm capable
         if(isFFMCapable)
             return List.of("--features=me.judge.lwjgl.LWJGL34Feature");
@@ -49,7 +49,7 @@ public class LWJGLProcessor implements IProcessor {
     }
 
     @Override
-    public void postBuild(JudgeLibInstall settings) {
+    public void postBuild(JudgeLibInstall settings, boolean appLayer) {
         // noop
     }
 

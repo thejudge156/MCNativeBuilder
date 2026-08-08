@@ -15,8 +15,8 @@ public class AndroidProcessor implements IProcessor {
     }
 
     @Override
-    public List<String> preBuild(JudgeLibInstall install, List<File> classpath) {
-        if(System.getenv("ANDROID_NDK") == null) {
+    public List<String> preBuild(JudgeLibInstall install, List<File> classpath, boolean appLayer) {
+        if(System.getenv("ANDROID_NDK") == null || !appLayer) {
             // No NDK, skip
             return List.of();
         }
@@ -57,12 +57,13 @@ public class AndroidProcessor implements IProcessor {
                 "--target=android-aarch64",
                 "-H:CAPCacheDir=" + capCacheFolder,
                 "-H:-ForeignAPISupport",
+                "-H:-CheckToolchain",
                 "--native-compiler-path=" + System.getenv("ANDROID_NDK") + "/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
         );
     }
 
     @Override
-    public void postBuild(JudgeLibInstall install) {
+    public void postBuild(JudgeLibInstall install, boolean appLayer) {
 
     }
 }

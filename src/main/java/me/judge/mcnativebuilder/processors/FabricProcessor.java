@@ -33,23 +33,23 @@ public class FabricProcessor implements IProcessor{
     }
 
     @Override
-    public List<String> preBuild(JudgeLibInstall settings, List<File> classpath) {
+    public List<String> preBuild(JudgeLibInstall settings, List<File> classpath, boolean appLayer) {
         ArrayList<String> list = new ArrayList<>();
         list.add("--initialize-at-run-time=net.fabricmc.fabric");
-        list.add("--features=me.judge.fabric.FabricFeature");
+        if(!Main.incremental)
+            list.add("--features=me.judge.fabric.FabricFeature");
         list.add("-J-Dfabric.gameJarPath=" + settings.mainJar);
         // Scanning in native image makes fabric unhappy
         list.add("-J-Dfabric.debug.disableClassPathIsolation=true");
         list.add("-H:+ClassForNameRespectsClassLoader");
-        list.add("--initialize-at-run-time=io.netty,org.slf4j,com.mojang.logging.LogUtils,org.spongepowered.asm.service.modlauncher.LoggerAdapterLog4j2");
-        list.add("--initialize-at-build-time=net.fabricmc.fabric.impl.client.indigo.IndigoMixinConfigPlugin");
+        list.add("--initialize-at-run-time=io.netty,org.slf4j,com.mojang.logging.LogUtils");
         list.add("-H:-ReduceImplicitExceptionStackTraceInformation");
         list.add("-J-Dfabric.server=false");
         return list;
     }
 
     @Override
-    public void postBuild(JudgeLibInstall settings) {
+    public void postBuild(JudgeLibInstall settings, boolean appLayer) {
 
     }
 }

@@ -59,6 +59,7 @@ public class Main {
     private static boolean android;
     private static boolean experimentalLWJGLPatch;
     private static boolean dryRun;
+    public static boolean incremental;
     public static String[] extraBuildArgs;
     private static MinecraftVersion mcVersion;
 
@@ -109,6 +110,10 @@ public class Main {
                 .type(Boolean.TYPE)
                 .setDefault(false)
                 .help("Don't run Minecraft before native-imaging. Helpful if you already have reflection configs.");
+        parser.addArgument("--incremental")
+                .type(Boolean.TYPE)
+                .setDefault(false)
+                .help("Native image the base libs and then using the libraries the application binary.");
 
         Namespace ns = null;
         try {
@@ -131,6 +136,7 @@ public class Main {
         shared = ns.getBoolean("shared");
         dryRun = ns.getBoolean("dry_run");
         buildMode = ns.getString("O");
+        incremental = ns.getBoolean("incremental");
 
         LOGGER.info("Initialized MCNativeBuilder...");
         if(Main.fabric) {
@@ -243,9 +249,12 @@ public class Main {
                 extraArgs.add("-J-javaagent:" + lwjglPatch.getAbsolutePath());
             }
 
+            if(fabric || incremental) {
+                libs.remove(new File(install.mainJar));
+            }
+
             if(fabric) {
                 mainClass = "me.judge.fabric.FabricMain";
-                libs.remove(new File(install.mainJar));
                 libs.stream().filter((f) -> f.getName().contains("datafixerupper")).findFirst().ifPresent((file) -> {
                     libs.remove(file);
                     extraArgs.add("-J-Dfabric.gameLibraries=" + file.getAbsolutePath());
@@ -253,41 +262,67 @@ public class Main {
             }
 
             for (IProcessor processor : processors) {
-                List<String> tempExtraArgs = processor.preBuild(install, libs);
+                List<String> tempExtraArgs = processor.preBuild(install, libs, !incremental);
                 if (tempExtraArgs != null) {
                     extraArgs.addAll(tempExtraArgs);
                 }
             }
+
+            String layerCreateArg = "-H:LayerCreate=libmcnative-base.nil,package=joptsimple";
+            String sharedArg = "--shared";
             if(shared)
-                extraArgs.add("--shared");
+                extraArgs.add(sharedArg);
+            if(incremental)
+                extraArgs.add(layerCreateArg);
+
+            if(!incremental)
+                extraArgs.add(mainClass);
 
             extraArgs.addAll(List.of(extraBuildArgs));
 
-            LOGGER.info("Building Native Image...");
-            try {
-                Process process = startCompile(libs, buildDir, buildMode, gc, extraArgs.toArray(new String[0]));
-                BufferedReader errors = process.errorReader();
-                BufferedReader info = process.inputReader();
-                while (process.isAlive()) {
-                    if (info.ready()) {
-                        LOGGER.info(info.readLine());
-                    }
-                    if (errors.ready()) {
-                        LOGGER.severe(errors.readLine());
+            LOGGER.info(incremental ? "Building Native Image..." : "Building base Native Image...");
+            runCompileBlocking(libs, incremental ? "libmcnative-base" : version, extraArgs);
+            LOGGER.info("Built to path " + buildDir.getAbsolutePath());
+            if(incremental) {
+                extraArgs.remove(sharedArg);
+                extraArgs.remove(layerCreateArg);
+                extraArgs.add("-H:LayerUse=libmcnative-base.nil");
+                extraArgs.add(mainClass);
+
+                for (IProcessor processor : processors) {
+                    List<String> tempExtraArgs = processor.preBuild(install, libs, true);
+                    if (tempExtraArgs != null) {
+                        extraArgs.addAll(tempExtraArgs);
                     }
                 }
-                errors.close();
-                info.close();
-            } catch (IOException e) {
-                LOGGER.severe("Error while compiling! " + e.getMessage());
+                runCompileBlocking(List.of(new File(install.mainJar)), version, extraArgs);
             }
-            LOGGER.info("Built to path " + buildDir.getAbsolutePath());
         } catch (ReflectiveOperationException | IOException | ExecutionException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static Process startCompile(List<File> classPath, File buildDir, String buildMode, String gc, String... extraArgs) throws IOException {
+    public static void runCompileBlocking(List<File> libs, String out, List<String> extraArgs) {
+        try {
+            Process process = startCompile(libs, buildDir, out, buildMode, gc, extraArgs.toArray(new String[0]));
+            BufferedReader errors = process.errorReader();
+            BufferedReader info = process.inputReader();
+            while (process.isAlive() || info.ready() || errors.ready()) {
+                if (info.ready()) {
+                    LOGGER.info(info.readLine());
+                }
+                if (errors.ready()) {
+                    LOGGER.severe(errors.readLine());
+                }
+            }
+            errors.close();
+            info.close();
+        } catch (IOException e) {
+            LOGGER.severe("Error while compiling! " + e.getMessage());
+        }
+    }
+
+    public static Process startCompile(List<File> classPath, File buildDir, String out, String buildMode, String gc, String... extraArgs) throws IOException {
         ProcessBuilder builder = new ProcessBuilder();
 
         File argFile = new File(buildDir, "command.txt");
@@ -304,7 +339,7 @@ public class Main {
         for(String arg : List.of("-H:ConfigurationFileDirectories=" + buildDir, "-cp",
                 classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)), "--gc=" + gc,
                 "--enable-url-protocols=https,http",
-                "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-g",
+                "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*",
                 "-H:IncludeResources=data/.*", "-H:IncludeResources=assets/.*", "-H:+AddAllCharsets", "-H:+IncludeAllLocales",
                 "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl")) {
             writer.write(" ");
@@ -332,8 +367,7 @@ public class Main {
         writer.flush();
         writer.close();
 
-        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "@" + argFile.getName(),
-                mainClass, "-o", version);
+        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "@" + argFile.getName(), "-o", out);
         builder.directory(buildDir);
         if(!buildDir.exists()) {
             buildDir.mkdirs();
