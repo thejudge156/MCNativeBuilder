@@ -349,7 +349,7 @@ public class Main {
                 classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)), "--gc=" + gc,
                 "--enable-url-protocols=https,http",
                 "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-H:IncludeResources=.*.so",
-                "-H:IncludeResources=.*.dylib", "-H:IncludeResources=.*.dll",
+                "-H:IncludeResources=.*.dylib", "-H:IncludeResources=.*.dll", "-H:IncludeResources=.*.jnilib",
                 "-H:IncludeResources=data/.*", "-H:IncludeResources=assets/.*", "-H:+AddAllCharsets", "-H:+IncludeAllLocales",
                 "--initialize-at-run-time=io.netty,org.slf4j,sun.net.dns.ResolverConfigurationImpl")) {
             writer.write(" ");
