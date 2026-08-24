@@ -45,4 +45,7 @@ bin/
 /install/
 /native-build/
 /logs/
+/libraries/
+/assets/
+/accounts/
 auth.json

@@ -39,10 +39,11 @@ public class FabricProcessor implements IProcessor{
         if(!Main.incremental)
             list.add("--features=me.judge.fabric.FabricFeature");
         list.add("-J-Dfabric.gameJarPath=" + settings.mainJar);
+        list.add("-J--add-exports=org.graalvm.nativeimage/org.graalvm.nativeimage.impl=ALL-UNNAMED");
+        list.add("-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted.image=ALL-UNNAMED");
         // Scanning in native image makes fabric unhappy
         list.add("-J-Dfabric.debug.disableClassPathIsolation=true");
         list.add("-H:+ClassForNameRespectsClassLoader");
-        list.add("--initialize-at-run-time=io.netty,org.slf4j,com.mojang.logging.LogUtils");
         list.add("-H:-ReduceImplicitExceptionStackTraceInformation");
         list.add("-J-Dfabric.server=false");
         return list;

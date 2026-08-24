@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -53,10 +54,11 @@ public class Main {
     private static String graalvmInstall;
     public static boolean shared;
     private static String gc;
-    private static String mainClass;
+    public static String mainClass;
     private static String buildMode;
     private static boolean fabric;
-    private static boolean android;
+    private static boolean debug;
+    public static boolean android;
     private static boolean experimentalLWJGLPatch;
     private static boolean dryRun;
     public static boolean incremental;
@@ -88,6 +90,10 @@ public class Main {
                 .setDefault(false)
                 .type(Boolean.TYPE)
                 .help("Installs Fabric support. Read the wiki for usage");
+        parser.addArgument("--debug")
+                .setDefault(false)
+                .type(Boolean.TYPE)
+                .help("Outputs debug information.");
         parser.addArgument("--shared")
                 .setDefault(false)
                 .type(Boolean.TYPE)
@@ -187,11 +193,11 @@ public class Main {
 
             LOGGER.info("Built MC Classpath...");
 
-            List<File> libs = new CopyOnWriteArrayList<>(Arrays.stream(install.classpath.split(File.pathSeparator)).map(File::new).toList());
+            List<File> libs = new ArrayList<>(Arrays.stream(install.classpath.split(File.pathSeparator)).map(File::new).toList());
             for (IProcessor processor : processors) {
                 List<File> processedLibs = processor.processClasspath(install);
                 if (processedLibs != null) {
-                    libs.addAll(processedLibs);
+                    libs.addAll(0, processedLibs);
                 }
             }
 
@@ -255,10 +261,13 @@ public class Main {
 
             if(fabric) {
                 mainClass = "me.judge.fabric.FabricMain";
-                libs.stream().filter((f) -> f.getName().contains("datafixerupper")).findFirst().ifPresent((file) -> {
-                    libs.remove(file);
+                List<File> toRemove = new ArrayList<>();
+                libs.stream().filter(Objects::nonNull).filter((f) -> f.getName().contains("datafixerupper") ||
+                        (f.getName().contains("lwjgl") && !f.getName().equals("lwjgl-glfw-classes.jar"))).forEach((file) -> {
                     extraArgs.add("-J-Dfabric.gameLibraries=" + file.getAbsolutePath());
+                    toRemove.add(file);
                 });
+                libs.removeAll(toRemove);
             }
 
             for (IProcessor processor : processors) {
@@ -280,7 +289,7 @@ public class Main {
 
             extraArgs.addAll(List.of(extraBuildArgs));
 
-            LOGGER.info(incremental ? "Building Native Image..." : "Building base Native Image...");
+            LOGGER.info(incremental ? "Building base Native Image..." : "Building Native Image...");
             runCompileBlocking(libs, incremental ? "libmcnative-base" : version, extraArgs);
             LOGGER.info("Built to path " + buildDir.getAbsolutePath());
             if(incremental) {
@@ -339,11 +348,22 @@ public class Main {
         for(String arg : List.of("-H:ConfigurationFileDirectories=" + buildDir, "-cp",
                 classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)), "--gc=" + gc,
                 "--enable-url-protocols=https,http",
-                "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*",
+                "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-H:IncludeResources=.*.so",
+                "-H:IncludeResources=.*.dylib", "-H:IncludeResources=.*.dll",
                 "-H:IncludeResources=data/.*", "-H:IncludeResources=assets/.*", "-H:+AddAllCharsets", "-H:+IncludeAllLocales",
-                "--initialize-at-run-time=sun.net.dns.ResolverConfigurationImpl")) {
+                "--initialize-at-run-time=io.netty,org.slf4j,sun.net.dns.ResolverConfigurationImpl")) {
             writer.write(" ");
             writer.write(arg);
+        }
+
+        if(debug) {
+            writer.write(" ");
+            writer.write("-g");
+        }
+
+        if(shared) {
+            writer.write(" ");
+            writer.write("-H:+InstallExitHandlers");
         }
 
         writer.write(" ");
