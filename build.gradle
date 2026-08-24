@@ -1,7 +1,7 @@
 plugins {
     id 'java'
     id 'application'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.gradleup.shadow' version '9.4.0'
 }
 
 group = 'me.judge'
@@ -16,15 +16,79 @@ repositories {
         url = "https://repo.u-team.info"
     }
     mavenCentral()
+    flatDir {
+        dirs("libs")
+    }
+}
+
+configurations {
+    extraLibs
 }
 
 dependencies {
-    shadow(implementation("net.hycrafthd:minecraft_downloader:1.1.1"))
     shadow(implementation("net.sourceforge.argparse4j:argparse4j:0.9.0"))
+    shadow(implementation("com.google.code.gson:gson:2.11.0"))
+    shadow(implementation("blank:judgelib:0.1.0"))
+    extraLibs(implementation("blank:MCNativeTools:9.8"))
+    extraLibs(implementation("blank:LWJGLPatch:9.8"))
+    extraLibs(implementation("blank:sponge-mixin:0.17.3"))
+    extraLibs(implementation("blank:lwjgl-glfw-classes"))
 
     testImplementation platform('org.junit:junit-bom:5.9.1')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
+
+import java.util.zip.*
+
+tasks.register('addExtraLibsToShadowJar') {
+    dependsOn tasks.shadowJar
+    inputs.files(configurations.extraLibs.files)
+    outputs.file(tasks.shadowJar.archiveFile.get().asFile)
+
+    doLast {
+        def shadowFile = tasks.shadowJar.archiveFile.get().asFile
+        def tempFile = new File(shadowFile.parent, shadowFile.name + ".tmp")
+
+        def inputZip = new ZipFile(shadowFile)
+        def outputZip = new ZipOutputStream(new FileOutputStream(tempFile))
+
+        // Copy existing entries
+        inputZip.entries().each { entry ->
+            outputZip.putNextEntry(new ZipEntry(entry.name))
+            if (!entry.isDirectory()) {
+                inputZip.getInputStream(entry).transferTo(outputZip)
+            }
+            outputZip.closeEntry()
+        }
+        inputZip.close()
+
+        // Add explicit folder entry
+        outputZip.putNextEntry(new ZipEntry("extraLibs/"))
+        outputZip.closeEntry()
+
+        // Add new jar files
+        configurations.extraLibs.files.each { lib ->
+            outputZip.putNextEntry(new ZipEntry("extraLibs/${lib.name}"))
+            lib.withInputStream { it.transferTo(outputZip) }
+            outputZip.closeEntry()
+        }
+
+        outputZip.close()
+
+        // Replace original jar
+        shadowFile.delete()
+        tempFile.renameTo(shadowFile)
+    }
+}
+
+startShadowScripts {
+    dependsOn tasks.addExtraLibsToShadowJar
+}
+
+shadowJar {
+    finalizedBy tasks.addExtraLibsToShadowJar
+}
+
 
 test {
     useJUnitPlatform()
