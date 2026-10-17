@@ -1,10 +1,7 @@
 package me.judge.mcnativebuilder;
 
 import com.microsoft.aad.msal4j.DeviceCode;
-import me.judge.mcnativebuilder.processors.AndroidProcessor;
-import me.judge.mcnativebuilder.processors.FabricProcessor;
-import me.judge.mcnativebuilder.processors.IProcessor;
-import me.judge.mcnativebuilder.processors.LWJGLProcessor;
+import me.judge.mcnativebuilder.processors.*;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
@@ -14,6 +11,7 @@ import org.angelauramc.judgelib.impl.InitInfo;
 import org.angelauramc.judgelib.installer.JudgeLibInstall;
 import org.angelauramc.judgelib.installer.LoaderType;
 import org.angelauramc.judgelib.installer.Source;
+import org.angelauramc.judgelib.installer.metadata.FabricMetadata;
 import org.angelauramc.judgelib.launcher.BaseJavaLauncher;
 import org.angelauramc.judgelib.util.json.MinecraftVersion;
 import org.angelauramc.judgelib.util.json.auth.JudgeLibAccount;
@@ -58,7 +56,9 @@ public class Main {
     private static String buildMode;
     private static boolean fabric;
     private static boolean debug;
+    public static String outputName;
     public static boolean android;
+    public static boolean ios;
     private static boolean experimentalLWJGLPatch;
     private static boolean dryRun;
     public static boolean incremental;
@@ -90,6 +90,10 @@ public class Main {
                 .setDefault(false)
                 .type(Boolean.TYPE)
                 .help("Installs Fabric support. Read the wiki for usage");
+        parser.addArgument("--ios")
+                .setDefault(false)
+                .type(Boolean.TYPE)
+                .help("Installs iOS support. Read the wiki for usage");
         parser.addArgument("--debug")
                 .setDefault(false)
                 .type(Boolean.TYPE)
@@ -120,6 +124,9 @@ public class Main {
                 .type(Boolean.TYPE)
                 .setDefault(false)
                 .help("Native image the base libs and then using the libraries the application binary.");
+        parser.addArgument("--out")
+                .type(String.class)
+                .help("Native image output name");
 
         Namespace ns = null;
         try {
@@ -137,6 +144,7 @@ public class Main {
         experimentalLWJGLPatch = ns.getBoolean("experimental_lwjgl");
         fabric = ns.getBoolean("fabric");
         android = ns.getBoolean("android");
+        ios = ns.getBoolean("ios");
         extraBuildArgs = ns.getString("extra_build_args").split("\\?");
         mainClass = ns.getString("main_class");
         shared = ns.getBoolean("shared");
@@ -144,12 +152,20 @@ public class Main {
         buildMode = ns.getString("O");
         incremental = ns.getBoolean("incremental");
 
+        if(ns.getString("out") == null)
+            outputName = version;
+        else
+            outputName = ns.getString("out");
+
         LOGGER.info("Initialized MCNativeBuilder...");
         if(Main.fabric) {
             Main.processors.add(new FabricProcessor());
         }
         if(Main.android) {
             Main.processors.add(new AndroidProcessor());
+        }
+        if(Main.ios) {
+            Main.processors.add(new iOSProcessor());
         }
 
         JudgeLibAPI api = JudgeLibAPI.getInstance();
@@ -183,7 +199,7 @@ public class Main {
                 mcVersion = LoaderType.FABRIC.getMetadata().getMinecraftVersion(Main.version);
                 install = JudgeLibAPI.getInstance().install(mcVersion.id, "", mcVersion, Path.of(System.getProperty("user.dir"), "install"),
                     Path.of(System.getProperty("user.dir"), "assets"), Path.of(System.getProperty("user.dir"), "libraries"));
-                install.addMod(Path.of(System.getProperty("user.dir"), "install"), "fabric-api", List.of(LoaderType.FABRIC), "fabric", Source.MODRINTH);
+                //install.addMod(Path.of(System.getProperty("user.dir"), "install"), "fabric-api", List.of(LoaderType.FABRIC), "fabric", Source.MODRINTH);
             } else {
                 mcVersion = LoaderType.VANILLA.getMetadata().getMinecraftVersion(Main.version);
                 install = JudgeLibAPI.getInstance().install(mcVersion.id, "", mcVersion, Path.of(System.getProperty("user.dir"), "install"),
@@ -202,10 +218,10 @@ public class Main {
             }
 
             List<String> extraArgs = new ArrayList<>();
-            LOGGER.info("Injecting MCNativeTools-9.8 into Classpath");
-            File mclibFile = new File(installDir, "MCNativeTools-9.8.jar");
+            LOGGER.info("Injecting MCNativeTools-9.9 into Classpath");
+            File mclibFile = new File(installDir, "MCNativeTools-9.9.jar");
             if (!mclibFile.exists()) {
-                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/MCNativeTools-9.8.jar")) {
+                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/MCNativeTools-9.9.jar")) {
                     if (stream != null) {
                         FileOutputStream fos = new FileOutputStream(mclibFile);
                         byte[] buffer = stream.readAllBytes();
@@ -217,7 +233,7 @@ public class Main {
                     throw new RuntimeException(e);
                 }
             }
-            libs.add(mclibFile);
+            libs.addFirst(mclibFile);
 
             if(!dryRun) {
                 LOGGER.info("Logging in...");
@@ -261,12 +277,28 @@ public class Main {
 
             if(fabric) {
                 mainClass = "me.judge.fabric.FabricMain";
+
+                File systemLogger = new File(installDir, "SystemLogger-9.9.jar");
+                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/SystemLogger-9.9.jar")) {
+                    if (stream != null) {
+                        FileOutputStream fos = new FileOutputStream(systemLogger);
+                        byte[] buffer = stream.readAllBytes();
+                        fos.write(buffer);
+                        fos.flush();
+                        fos.close();
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
                 List<File> toRemove = new ArrayList<>();
-                libs.stream().filter(Objects::nonNull).filter((f) -> f.getName().contains("datafixerupper") ||
-                        (f.getName().contains("lwjgl") && !f.getName().equals("lwjgl-glfw-classes.jar"))).forEach((file) -> {
-                    extraArgs.add("-J-Dfabric.gameLibraries=" + file.getAbsolutePath());
-                    toRemove.add(file);
-                });
+                MinecraftVersion vanillaVersion = LoaderType.VANILLA.getMetadata().getMinecraftVersion(version);
+
+                for (MinecraftVersion.Library vanillaLibrary : vanillaVersion.libraries) {
+                    toRemove.add(libs.stream().filter(f -> f.getAbsolutePath().contains(vanillaLibrary.downloads.artifact.path)).findFirst().orElse(null));
+                }
+
+                extraArgs.add("-J-Dfabric.gameLibraries=" + toRemove.stream().filter(Objects::nonNull).map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)) + File.pathSeparator + systemLogger.getAbsolutePath());
                 libs.removeAll(toRemove);
             }
 
@@ -345,7 +377,7 @@ public class Main {
 
         FileWriter writer = new FileWriter(argFile);
 
-        for(String arg : List.of("-H:ConfigurationFileDirectories=" + buildDir, "-cp",
+        for(String arg : List.of("-cp",
                 classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)), "--gc=" + gc,
                 "--enable-url-protocols=https,http",
                 "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-H:IncludeResources=.*.so",
@@ -354,6 +386,11 @@ public class Main {
                 "--initialize-at-run-time=io.netty,org.slf4j,sun.net.dns.ResolverConfigurationImpl")) {
             writer.write(" ");
             writer.write(arg);
+        }
+
+        if(!fabric) {
+            writer.write(" ");
+            writer.write("-H:ConfigurationFileDirectories=" + buildDir);
         }
 
         if(debug) {
@@ -387,7 +424,7 @@ public class Main {
         writer.flush();
         writer.close();
 
-        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "@" + argFile.getName(), "-o", out);
+        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "@" + argFile.getName(), "-o", outputName);
         builder.directory(buildDir);
         if(!buildDir.exists()) {
             buildDir.mkdirs();

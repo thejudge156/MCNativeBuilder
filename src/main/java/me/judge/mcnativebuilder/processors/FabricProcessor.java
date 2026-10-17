@@ -10,7 +10,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FabricProcessor implements IProcessor{
+public class FabricProcessor implements IProcessor {
     @Override
     public List<File> processClasspath(JudgeLibInstall settings) {
         for (String file : settings.classpath.split(File.pathSeparator)) {
@@ -43,6 +43,8 @@ public class FabricProcessor implements IProcessor{
         list.add("-J--add-exports=org.graalvm.nativeimage.builder/com.oracle.svm.hosted.image=ALL-UNNAMED");
         // Scanning in native image makes fabric unhappy
         list.add("-J-Dfabric.debug.disableClassPathIsolation=true");
+        list.add("-J-Dfabric.loader.useCompatibilityClassLoader=true");
+        list.add("--add-modules=jdk.jfr");
         list.add("-H:+ClassForNameRespectsClassLoader");
         list.add("-H:-ReduceImplicitExceptionStackTraceInformation");
         list.add("-J-Dfabric.server=false");

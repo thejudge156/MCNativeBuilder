@@ -55,8 +55,8 @@ public class AndroidProcessor implements IProcessor {
                             "-H:-UseCAPCache",
                             "-H:+NewCAPCache",
                             "-H:-CheckToolchain",
+                            "-Dos.arch=aarch64",
                             "-Dsvm.platform=org.graalvm.nativeimage.Platform$ANDROID_AARCH64",
-                            "-H:-ForeignAPISupport",
                             "--native-compiler-options=-static",
                             "--native-compiler-options=-Wl,--gc-sections",
                             "--native-compiler-path=" + System.getenv("ANDROID_NDK") + "/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang",
@@ -68,7 +68,7 @@ public class AndroidProcessor implements IProcessor {
         return List.of(
                 "-H:-UseContainerSupport",
                 "--target=android-aarch64",
-                "-H:-ForeignAPISupport",
+                "-Dos.arch=aarch64",
                 "-H:-CheckToolchain",
                 "-H:PageSize=16384",
                 "-H:+UseCAPCache",
