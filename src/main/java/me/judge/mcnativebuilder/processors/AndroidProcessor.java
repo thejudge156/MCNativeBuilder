@@ -17,6 +17,7 @@ public class AndroidProcessor implements IProcessor {
         File file = new File(Main.buildDir, "lwjgl-glfw-classes.jar");
         try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/lwjgl-glfw-classes.jar")) {
             if (stream != null) {
+                file.getParentFile().mkdirs();
                 FileOutputStream fos = new FileOutputStream(file);
                 byte[] buffer = stream.readAllBytes();
                 fos.write(buffer);
