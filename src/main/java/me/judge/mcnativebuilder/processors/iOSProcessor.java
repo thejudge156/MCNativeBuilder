@@ -82,7 +82,7 @@ public class iOSProcessor implements IProcessor {
                 "-H:+UseCAPCache",
                 "-H:CAPCacheDir=" + capCacheFolder,
                 "--native-compiler-options=-target",
-                "--native-compiler-options=arm64-apple-ios14.0",
+                "--native-compiler-options=arm64-apple-ios15.0",
                 "--native-compiler-options=-isysroot",
                 "--native-compiler-options=" + sdkPathString,
                 "--native-compiler-options=-install_name",

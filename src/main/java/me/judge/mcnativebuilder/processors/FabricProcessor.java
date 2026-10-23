@@ -44,10 +44,11 @@ public class FabricProcessor implements IProcessor {
         // Scanning in native image makes fabric unhappy
         list.add("-J-Dfabric.debug.disableClassPathIsolation=true");
         list.add("-J-Dfabric.loader.useCompatibilityClassLoader=true");
-        list.add("--add-modules=jdk.jfr");
         list.add("-H:+ClassForNameRespectsClassLoader");
         list.add("-H:-ReduceImplicitExceptionStackTraceInformation");
         list.add("-J-Dfabric.server=false");
+        list.add("-Duser.language=en");
+        list.add("-Duser.country=US");
         return list;
     }
 

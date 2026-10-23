@@ -379,7 +379,7 @@ public class Main {
 
         for(String arg : List.of("-cp",
                 classPath.stream().map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)), "--gc=" + gc,
-                "--enable-url-protocols=https,http",
+                "--enable-url-protocols=https,http", "--add-modules=jdk.jfr", "-H:ExcludeResources=.*.class",
                 "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-H:IncludeResources=.*.so",
                 "-H:IncludeResources=.*.dylib", "-H:IncludeResources=.*.dll", "-H:IncludeResources=.*.jnilib",
                 "-H:IncludeResources=data/.*", "-H:IncludeResources=assets/.*", "-H:+AddAllCharsets", "-H:+IncludeAllLocales",
@@ -388,10 +388,8 @@ public class Main {
             writer.write(arg);
         }
 
-        if(!fabric) {
-            writer.write(" ");
-            writer.write("-H:ConfigurationFileDirectories=" + buildDir);
-        }
+        writer.write(" ");
+        writer.write("-H:ConfigurationFileDirectories=" + buildDir);
 
         if(debug) {
             writer.write(" ");

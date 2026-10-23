@@ -38,7 +38,7 @@ public class AndroidProcessor implements IProcessor {
 
         for (String file : install.classpath.split(File.pathSeparator)) {
             String[] paths = file.split(Pattern.quote(File.separator));
-            if(paths[paths.length - 1].contains("lwjgl-glfw-3.") || paths[paths.length - 1].contains("lwjgl-opengl-3.")) {
+            if(paths[paths.length - 1].contains("lwjgl") || paths[paths.length - 1].contains("lwjgl-")) {
                 try {
                     Files.delete(Path.of(file));
                 } catch (IOException e) {

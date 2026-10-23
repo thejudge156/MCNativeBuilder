@@ -34,6 +34,7 @@ dependencies {
     extraLibs(implementation("blank:LWJGLPatch:9.8"))
     extraLibs(implementation("blank:sponge-mixin:0.17.3"))
     extraLibs(implementation("blank:lwjgl"))
+    extraLibs(implementation("blank:lwjgl-glfw-classes"))
 
     testImplementation platform('org.junit:junit-bom:5.9.1')
     testImplementation 'org.junit.jupiter:junit-jupiter'
