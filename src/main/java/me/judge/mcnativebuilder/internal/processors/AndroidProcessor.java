@@ -1,11 +1,10 @@
-package me.judge.mcnativebuilder.processors;
+package me.judge.mcnativebuilder.internal.processors;
 
-import me.judge.mcnativebuilder.Main;
-import org.angelauramc.judgelib.installer.JudgeLibInstall;
-import org.angelauramc.judgelib.util.ConnectionUtil;
+import me.judge.mcnativebuilder.*;
+import me.judge.mcnativebuilder.internal.Util;
+import org.angelauramc.judgelib.instance.Instance;
 
 import java.io.*;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -13,31 +12,20 @@ import java.util.regex.Pattern;
 
 public class AndroidProcessor implements IProcessor {
     @Override
-    public List<File> processClasspath(JudgeLibInstall install) {
-        File file = new File(Main.buildDir, "lwjgl-glfw-classes.jar");
-        try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/lwjgl-glfw-classes.jar")) {
-            if (stream != null) {
-                file.getParentFile().mkdirs();
-                FileOutputStream fos = new FileOutputStream(file);
-                byte[] buffer = stream.readAllBytes();
-                fos.write(buffer);
-                fos.flush();
-                fos.close();
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public List<File> processClasspath(Instance install) {
+        File file = new File(Main.installDir, "lwjgl-glfw-classes.jar");
+        Util.extractResource("lwjgl-glfw-classes.jar", file);
         return List.of(file);
     }
 
     @Override
-    public List<String> preBuild(JudgeLibInstall install, List<File> classpath, boolean appLayer) {
-        if(System.getenv("ANDROID_NDK") == null || !appLayer) {
+    public List<String> preBuild(Instance install, List<File> classpath, LayerState appLayer) {
+        if(System.getenv("ANDROID_NDK") == null) {
             // No NDK, skip
             return List.of();
         }
 
-        for (String file : install.classpath.split(File.pathSeparator)) {
+        for (String file : install.classpath().split(File.pathSeparator)) {
             String[] paths = file.split(Pattern.quote(File.separator));
             if(paths[paths.length - 1].contains("lwjgl") || paths[paths.length - 1].contains("lwjgl-")) {
                 try {
@@ -49,8 +37,8 @@ public class AndroidProcessor implements IProcessor {
         }
 
         File capCacheFolder = new File(Main.buildDir, "caps");
-        if(!capCacheFolder.exists()) {
-            Main.runCompileBlocking(classpath, "capCache",
+        if(!capCacheFolder.exists() && appLayer != LayerState.APP_LAYER) {
+            Main.runCompileBlocking(install, classpath, "capCache",
                     List.of("-H:CAPCacheDir=" + capCacheFolder,
                             "-H:-UseContainerSupport",
                             "-H:-UseCAPCache",
@@ -62,7 +50,7 @@ public class AndroidProcessor implements IProcessor {
                             "--native-compiler-options=-Wl,--gc-sections",
                             "--native-compiler-path=" + System.getenv("ANDROID_NDK") + "/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang",
                             Main.mainClass
-                    )
+                    ), BuildType.QUERY_BUILD
             );
         }
 
@@ -79,7 +67,7 @@ public class AndroidProcessor implements IProcessor {
     }
 
     @Override
-    public void postBuild(JudgeLibInstall install, boolean appLayer) {
+    public void postBuild(Instance install, LayerState appLayer) {
 
     }
 }

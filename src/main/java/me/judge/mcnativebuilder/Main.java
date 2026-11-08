@@ -1,20 +1,34 @@
 package me.judge.mcnativebuilder;
 
 import com.microsoft.aad.msal4j.DeviceCode;
-import me.judge.mcnativebuilder.processors.*;
+import com.microsoft.aad.msal4j.PublicClientApplication;
+import me.judge.mcnativebuilder.internal.TokenCache;
+import me.judge.mcnativebuilder.internal.Util;
+import me.judge.mcnativebuilder.internal.processors.*;
+import net.flamgop.auth.AuthSession;
+import net.flamgop.auth.Authenticator;
+import net.flamgop.auth.LoginFlow;
+import net.flamgop.auth.minecraft.MinecraftAPI;
+import net.flamgop.auth.minecraft.MinecraftProfile;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
+import okhttp3.OkHttpClient;
 import org.angelauramc.judgelib.JudgeLibAPI;
-import org.angelauramc.judgelib.impl.InitInfo;
-import org.angelauramc.judgelib.installer.JudgeLibInstall;
+import org.angelauramc.judgelib.installer.DownloadTracker;
+import org.angelauramc.judgelib.installer.JudgeLibVersion;
 import org.angelauramc.judgelib.installer.LoaderType;
-import org.angelauramc.judgelib.installer.Source;
-import org.angelauramc.judgelib.installer.metadata.FabricMetadata;
-import org.angelauramc.judgelib.launcher.BaseJavaLauncher;
+import org.angelauramc.judgelib.instance.Instance;
+import org.angelauramc.judgelib.instance.InstanceFormat;
+import org.angelauramc.judgelib.instance.InstanceManager;
+import org.angelauramc.judgelib.launcher.Platform;
+import org.angelauramc.judgelib.util.JsonUtil;
+import org.angelauramc.judgelib.util.json.JudgeLibAccount;
 import org.angelauramc.judgelib.util.json.MinecraftVersion;
-import org.angelauramc.judgelib.util.json.auth.JudgeLibAccount;
+import org.jspecify.annotations.NonNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
@@ -22,11 +36,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public class Main {
@@ -39,16 +50,16 @@ public class Main {
             OS_EXT_SHELL = "";
         }
     }
-    public static final Logger LOGGER = Logger.getLogger(Main.class.getName());
+    public static final Logger LOGGER = LoggerFactory.getLogger(Main.class.getName());
 
     public static String OS_EXT;
     public static String OS_EXT_SHELL;
 
     public static String homePath = System.getProperty("user.dir");
-    public static File installDir = new File(homePath, "install");
+    public static File installDir = new File(homePath, "installs");
     public static File buildDir;
 
-    private static String version;
+    public static String version;
     private static String graalvmInstall;
     public static boolean shared;
     private static String gc;
@@ -151,6 +162,7 @@ public class Main {
         dryRun = ns.getBoolean("dry_run");
         buildMode = ns.getString("O");
         incremental = ns.getBoolean("incremental");
+        debug = ns.getBoolean("debug");
 
         if(ns.getString("out") == null)
             outputName = version;
@@ -168,17 +180,14 @@ public class Main {
             Main.processors.add(new iOSProcessor());
         }
 
-        JudgeLibAPI api = JudgeLibAPI.getInstance();
-        api.initialize(new InitInfo("d17a73a2-707c-40f5-8c90-d3eda0956f10", "https://login.microsoftonline.com/consumers/", ".", Main::printResult));
-
         if(processors != null) {
             for (String processorPath : processors) {
                 try {
                     Main.processors.add((IProcessor) Class.forName(processorPath).getDeclaredConstructor().newInstance());
-                    LOGGER.fine("Added processor " + processorPath);
+                    LOGGER.debug("Added processor {}", processorPath);
                 } catch (ClassNotFoundException | InvocationTargetException | InstantiationException |
                          IllegalAccessException | NoSuchMethodException e) {
-                    LOGGER.severe("Could not find the processor with name " + processorPath);
+                    LOGGER.warn("Could not find the processor with name {}", processorPath);
                 }
             }
         }
@@ -191,25 +200,27 @@ public class Main {
 
     public static void start() {
         processors.add(new LWJGLProcessor());
-        LOGGER.fine("Finished adding processors...");
+        LOGGER.debug("Finished adding processors...");
 
         try {
-            JudgeLibInstall install;
+            Instance install;
+            DownloadTracker tracker = new DownloadTracker();
             if (fabric) {
-                mcVersion = LoaderType.FABRIC.getMetadata().getMinecraftVersion(Main.version);
-                install = JudgeLibAPI.getInstance().install(mcVersion.id, "", mcVersion, Path.of(System.getProperty("user.dir"), "install"),
-                    Path.of(System.getProperty("user.dir"), "assets"), Path.of(System.getProperty("user.dir"), "libraries"));
+                mcVersion = LoaderType.FABRIC.getMetadata().getMinecraftVersion(Main.version, null);
+                JudgeLibVersion judgeLibVersion = JudgeLibAPI.installVersion(mcVersion, Path.of(System.getProperty("user.dir"), "assets"), Path.of(System.getProperty("user.dir"), "libraries"), tracker);
+                install = JudgeLibAPI.createInstance(outputName, InstanceFormat.HOTSPOT_JVM, judgeLibVersion, installDir + "/" + outputName, System.getProperty("user.dir") + "/assets", graalvmInstall + "/bin/" + "java", null);
                 //install.addMod(Path.of(System.getProperty("user.dir"), "install"), "fabric-api", List.of(LoaderType.FABRIC), "fabric", Source.MODRINTH);
             } else {
-                mcVersion = LoaderType.VANILLA.getMetadata().getMinecraftVersion(Main.version);
-                install = JudgeLibAPI.getInstance().install(mcVersion.id, "", mcVersion, Path.of(System.getProperty("user.dir"), "install"),
-                        Path.of(System.getProperty("user.dir"), "assets"), Path.of(System.getProperty("user.dir"), "libraries"));
+                mcVersion = LoaderType.VANILLA.getMetadata().getMinecraftVersion(Main.version, null);
+                JudgeLibVersion judgeLibVersion = JudgeLibAPI.installVersion(mcVersion, Path.of(System.getProperty("user.dir"), "assets"), Path.of(System.getProperty("user.dir"), "libraries"), tracker);
+                install = JudgeLibAPI.createInstance(outputName, InstanceFormat.HOTSPOT_JVM, judgeLibVersion, installDir + "/" + outputName, System.getProperty("user.dir") + "/assets", graalvmInstall + "/bin/" + "java", null);
             }
-            buildDir = new File(installDir, install.installName);
+            InstanceManager.saveInstance(install);
+            buildDir = new File(install.gameDir());
 
             LOGGER.info("Built MC Classpath...");
 
-            List<File> libs = new ArrayList<>(Arrays.stream(install.classpath.split(File.pathSeparator)).map(File::new).toList());
+            List<File> libs = new ArrayList<>(Arrays.stream(install.classpath().split(File.pathSeparator)).map(File::new).toList());
             for (IProcessor processor : processors) {
                 List<File> processedLibs = processor.processClasspath(install);
                 if (processedLibs != null) {
@@ -220,30 +231,40 @@ public class Main {
             List<String> extraArgs = new ArrayList<>();
             LOGGER.info("Injecting MCNativeTools-9.9 into Classpath");
             File mclibFile = new File(installDir, "MCNativeTools-9.9.jar");
-            if (!mclibFile.exists()) {
-                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/MCNativeTools-9.9.jar")) {
-                    if (stream != null) {
-                        FileOutputStream fos = new FileOutputStream(mclibFile);
-                        byte[] buffer = stream.readAllBytes();
-                        fos.write(buffer);
-                        fos.flush();
-                        fos.close();
-                    }
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            Util.extractResource("MCNativeTools-9.9.jar", mclibFile);
             libs.addFirst(mclibFile);
+
+            File accountDir = new File(installDir, "account");
 
             if(!dryRun) {
                 LOGGER.info("Logging in...");
-                CompletableFuture<JudgeLibAccount> accountFuture = JudgeLibAPI.getInstance().startLogin("TheJudge156");
-                JudgeLibAccount account = accountFuture.join();
+                OkHttpClient client = new OkHttpClient.Builder().build();
+
+                Authenticator auth = new Authenticator(
+                        PublicClientApplication.builder("d17a73a2-707c-40f5-8c90-d3eda0956f10")
+                                .authority("https://login.microsoftonline.com/consumers/")
+                                .setTokenCacheAccessAspect(new TokenCache(installDir.getAbsolutePath()))
+                                .build(),
+                        client
+                );
+                JudgeLibAccount account;
+                JudgeLibAccount[] accounts = JudgeLibAPI.getAccounts(accountDir.getAbsolutePath());
+                if(accounts.length > 0) {
+                    account = accounts[0];
+                    if(account.expired()) {
+                        LoginFlow flow = new LoginFlow.SilentAuth(account.microsoftEmail());
+                        account = getJudgeLibAccount(client, auth, flow);
+                    }
+                    account.saveAccount(accountDir.getAbsolutePath());
+                } else {
+                    LoginFlow flow = new LoginFlow.DeviceCodeAuth(Main::printResult);
+                    account = getJudgeLibAccount(client, auth, flow);
+                    account.saveAccount(accountDir.getAbsolutePath());
+                }
+
                 LOGGER.info("Logged in...");
                 LOGGER.info("Launching MC with tracing agent, please follow the instructions in the README to prevent runtime crashes");
-                JudgeLibAPI.getInstance().chooseLauncher("JRE");
-                BaseJavaLauncher.INSTANCE.setup(new File(graalvmInstall, "bin/java").getAbsolutePath());
-                JudgeLibAPI.getInstance().launchInstall(install, account, new String[0], new String[]{"-agentlib:native-image-agent=config-merge-dir=" + buildDir});
+                JudgeLibAPI.launchInstance(install, account, Platform.JRE, new String[0], new String[]{"-agentlib:native-image-agent=config-merge-dir=" + buildDir}, System.getenv("LD_LIBRARY_PATH"), "libGL.so");
             }
 
             if(experimentalLWJGLPatch) {
@@ -272,95 +293,79 @@ public class Main {
             }
 
             if(fabric || incremental) {
-                libs.remove(new File(install.mainJar));
+                libs.remove(new File(install.mainJar()));
             }
 
             if(fabric) {
                 mainClass = "me.judge.fabric.FabricMain";
-
-                File systemLogger = new File(installDir, "SystemLogger-9.9.jar");
-                try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/SystemLogger-9.9.jar")) {
-                    if (stream != null) {
-                        FileOutputStream fos = new FileOutputStream(systemLogger);
-                        byte[] buffer = stream.readAllBytes();
-                        fos.write(buffer);
-                        fos.flush();
-                        fos.close();
-                    }
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-
-                List<File> toRemove = new ArrayList<>();
-                MinecraftVersion vanillaVersion = LoaderType.VANILLA.getMetadata().getMinecraftVersion(version);
-
-                for (MinecraftVersion.Library vanillaLibrary : vanillaVersion.libraries) {
-                    toRemove.add(libs.stream().filter(f -> f.getAbsolutePath().contains(vanillaLibrary.downloads.artifact.path)).findFirst().orElse(null));
-                }
-
-                extraArgs.add("-J-Dfabric.gameLibraries=" + toRemove.stream().filter(Objects::nonNull).map(File::getAbsolutePath).collect(Collectors.joining(File.pathSeparator)) + File.pathSeparator + systemLogger.getAbsolutePath());
-                libs.removeAll(toRemove);
             }
-
-            for (IProcessor processor : processors) {
-                List<String> tempExtraArgs = processor.preBuild(install, libs, !incremental);
-                if (tempExtraArgs != null) {
-                    extraArgs.addAll(tempExtraArgs);
-                }
-            }
-
-            String layerCreateArg = "-H:LayerCreate=libmcnative-base.nil,package=joptsimple";
-            String sharedArg = "--shared";
-            if(shared)
-                extraArgs.add(sharedArg);
-            if(incremental)
-                extraArgs.add(layerCreateArg);
-
-            if(!incremental)
-                extraArgs.add(mainClass);
 
             extraArgs.addAll(List.of(extraBuildArgs));
 
-            LOGGER.info(incremental ? "Building base Native Image..." : "Building Native Image...");
-            runCompileBlocking(libs, incremental ? "libmcnative-base" : version, extraArgs);
-            LOGGER.info("Built to path " + buildDir.getAbsolutePath());
-            if(incremental) {
-                extraArgs.remove(sharedArg);
-                extraArgs.remove(layerCreateArg);
-                extraArgs.add("-H:LayerUse=libmcnative-base.nil");
-                extraArgs.add(mainClass);
+            List<String> baseArgs = new ArrayList<>(extraArgs);
+            for (IProcessor processor : processors) {
+                List<String> tempExtraArgs = processor.preBuild(install, libs, incremental ? LayerState.LIB_LAYER : LayerState.NOT_LAYERED);
+                if (tempExtraArgs != null) {
+                    baseArgs.addAll(tempExtraArgs);
+                }
+            }
 
+            String layerCreateArg = "-H:LayerCreate=libmcnative-base.nil,module=java.scripting,module=java.base,module=jdk.httpserver,module=java.management,module=jdk.jfr,module=java.desktop,module=java.sql,module=java.net.http";
+            String sharedArg = "--shared";
+            if(incremental)
+                baseArgs.add(layerCreateArg);
+            else if(shared) {
+                baseArgs.add(sharedArg);
+                baseArgs.add("-H:+InstallExitHandlers");
+            }
+
+            if(!incremental)
+                baseArgs.add(mainClass);
+
+            LOGGER.info(incremental ? "Building base-layer Native Image..." : "Building Native Image...");
+            //runCompileBlocking(install, libs, incremental ? "libmcnative-base" : outputName, baseArgs, BuildType.NORMAL_BUILD);
+            LOGGER.info("Built to path {}", buildDir.getAbsolutePath());
+            if(incremental) {
+                List<String> extensionExtraArgs = new ArrayList<>(extraArgs);
                 for (IProcessor processor : processors) {
-                    List<String> tempExtraArgs = processor.preBuild(install, libs, true);
+                    List<String> tempExtraArgs = processor.preBuild(install, libs, LayerState.APP_LAYER);
                     if (tempExtraArgs != null) {
-                        extraArgs.addAll(tempExtraArgs);
+                        extensionExtraArgs.addAll(tempExtraArgs);
                     }
                 }
-                runCompileBlocking(List.of(new File(install.mainJar)), version, extraArgs);
+
+                extensionExtraArgs.add("-H:LayerUse=libmcnative-base.nil");
+                if(shared)
+                    extensionExtraArgs.add(sharedArg);
+                extensionExtraArgs.add(mainClass);
+
+                LOGGER.info("Building app-layer Native Image...");
+                runCompileBlocking(install, libs, outputName, extensionExtraArgs, BuildType.NORMAL_BUILD);
             }
         } catch (ReflectiveOperationException | IOException | ExecutionException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static void runCompileBlocking(List<File> libs, String out, List<String> extraArgs) {
+    @NonNull
+    private static JudgeLibAccount getJudgeLibAccount(OkHttpClient client, Authenticator auth, LoginFlow flow) throws InterruptedException, ExecutionException {
+        CompletableFuture<AuthSession> accountFuture = auth.authenticate(flow, null);
+        AuthSession session = accountFuture.join();
+        MinecraftAPI api = new MinecraftAPI(client);
+        MinecraftProfile profile = api.queryPlayerProfile(session).get();
+        return new JudgeLibAccount(profile.name(), profile.uuid().toString(), session.minecraftToken(), Long.toString(System.currentTimeMillis() + session.expiresIn()), session.microsoftUsername());
+    }
+
+    public static void runCompileBlocking(Instance install, List<File> libs, String out, List<String> extraArgs, BuildType buildType) {
         try {
             Process process = startCompile(libs, buildDir, out, buildMode, gc, extraArgs.toArray(new String[0]));
-            BufferedReader errors = process.errorReader();
-            BufferedReader info = process.inputReader();
-            while (process.isAlive() || info.ready() || errors.ready()) {
-                if (info.ready()) {
-                    LOGGER.info(info.readLine());
-                }
-                if (errors.ready()) {
-                    LOGGER.severe(errors.readLine());
-                }
-            }
-            errors.close();
-            info.close();
-        } catch (IOException e) {
-            LOGGER.severe("Error while compiling! " + e.getMessage());
+            process.waitFor();
+        } catch (InterruptedException | IOException e) {
+            LOGGER.error("Error while compiling! " + e.getMessage());
         }
+
+        if(buildType == BuildType.NORMAL_BUILD)
+            for (IProcessor processor : processors) processor.postBuild(install, incremental ? LayerState.LIB_LAYER : LayerState.NOT_LAYERED);
     }
 
     public static Process startCompile(List<File> classPath, File buildDir, String out, String buildMode, String gc, String... extraArgs) throws IOException {
@@ -375,6 +380,11 @@ public class Main {
             argFile.createNewFile();
         }
 
+        File tmpDir = new File(buildDir, "tmp");
+        if(!tmpDir.exists()) {
+            tmpDir.mkdirs();
+        }
+
         FileWriter writer = new FileWriter(argFile);
 
         for(String arg : List.of("-cp",
@@ -383,7 +393,7 @@ public class Main {
                 "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-H:IncludeResources=.*.so",
                 "-H:IncludeResources=.*.dylib", "-H:IncludeResources=.*.dll", "-H:IncludeResources=.*.jnilib",
                 "-H:IncludeResources=data/.*", "-H:IncludeResources=assets/.*", "-H:+AddAllCharsets", "-H:+IncludeAllLocales",
-                "--initialize-at-run-time=io.netty,org.slf4j,sun.net.dns.ResolverConfigurationImpl")) {
+                "--initialize-at-run-time=io.netty,org.slf4j,sun.net.dns.ResolverConfigurationImpl", "-H:TempDirectory=tmp")) {
             writer.write(" ");
             writer.write(arg);
         }
@@ -394,11 +404,6 @@ public class Main {
         if(debug) {
             writer.write(" ");
             writer.write("-g");
-        }
-
-        if(shared) {
-            writer.write(" ");
-            writer.write("-H:+InstallExitHandlers");
         }
 
         writer.write(" ");
@@ -422,8 +427,9 @@ public class Main {
         writer.flush();
         writer.close();
 
-        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "@" + argFile.getName(), "-o", outputName);
+        builder.command(graalvmInstall + "/bin/native-image" + OS_EXT_SHELL, "@" + argFile.getName(), "-o", out);
         builder.directory(buildDir);
+        builder.inheritIO();
         if(!buildDir.exists()) {
             buildDir.mkdirs();
         }

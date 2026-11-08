@@ -1,7 +1,8 @@
-package me.judge.mcnativebuilder.processors;
+package me.judge.mcnativebuilder.internal.processors;
 
-import me.judge.mcnativebuilder.Main;
-import org.angelauramc.judgelib.installer.JudgeLibInstall;
+import me.judge.mcnativebuilder.*;
+import me.judge.mcnativebuilder.internal.Util;
+import org.angelauramc.judgelib.instance.Instance;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -11,25 +12,15 @@ import java.util.regex.Pattern;
 
 public class iOSProcessor implements IProcessor {
     @Override
-    public List<File> processClasspath(JudgeLibInstall install) {
-        File lwjgl = new File(Main.buildDir, "lwjgl.jar");
-        try (InputStream stream = Main.class.getClassLoader().getResourceAsStream("extraLibs/lwjgl.jar")) {
-            if (stream != null) {
-                FileOutputStream fos = new FileOutputStream(lwjgl);
-                byte[] buffer = stream.readAllBytes();
-                fos.write(buffer);
-                fos.flush();
-                fos.close();
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public List<File> processClasspath(Instance install) {
+        File lwjgl = new File(Main.installDir, "lwjgl.jar");
+        Util.extractResource("lwjgl.jar", lwjgl);
         return List.of(lwjgl);
     }
 
     @Override
-    public List<String> preBuild(JudgeLibInstall install, List<File> classpath, boolean appLayer) {
-        for (String file : install.classpath.split(File.pathSeparator)) {
+    public List<String> preBuild(Instance install, List<File> classpath, LayerState appLayer) {
+        for (String file : install.classpath().split(File.pathSeparator)) {
             String[] paths = file.split(Pattern.quote(File.separator));
             if(paths[paths.length - 1].contains("lwjgl-")) {
                 try {
@@ -41,8 +32,8 @@ public class iOSProcessor implements IProcessor {
         }
 
         File capCacheFolder = new File(Main.buildDir, "caps");
-        if(!capCacheFolder.exists()) {
-            Main.runCompileBlocking(classpath, "capCache",
+        if(!capCacheFolder.exists() || appLayer != LayerState.APP_LAYER) {
+            Main.runCompileBlocking(install, classpath, "capCache",
                     List.of("-H:CAPCacheDir=" + capCacheFolder,
                             "-H:-UseContainerSupport",
                             "-H:-UseCAPCache",
@@ -50,7 +41,7 @@ public class iOSProcessor implements IProcessor {
                             "-H:-CheckToolchain",
                             "-Dsvm.platform=org.graalvm.nativeimage.Platform$IOS_AARCH64",
                             Main.mainClass
-                    )
+                    ), BuildType.QUERY_BUILD
             );
         }
 
@@ -92,7 +83,7 @@ public class iOSProcessor implements IProcessor {
     }
 
     @Override
-    public void postBuild(JudgeLibInstall install, boolean appLayer) {
+    public void postBuild(Instance install, LayerState appLayer) {
 
     }
 }
