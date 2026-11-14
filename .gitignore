@@ -42,7 +42,10 @@ bin/
 .DS_Store
 
 ### Project Specific ###
-/install/
+/installs/
 /native-build/
 /logs/
+/libraries/
+/assets/
+/accounts/
 auth.json
