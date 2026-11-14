@@ -323,7 +323,7 @@ public class Main {
                 baseArgs.add(mainClass);
 
             LOGGER.info(incremental ? "Building base-layer Native Image..." : "Building Native Image...");
-            //runCompileBlocking(install, libs, incremental ? "libmcnative-base" : outputName, baseArgs, BuildType.NORMAL_BUILD);
+            runCompileBlocking(install, libs, incremental ? "libmcnative-base" : outputName, baseArgs, BuildType.NORMAL_BUILD);
             LOGGER.info("Built to path {}", buildDir.getAbsolutePath());
             if(incremental) {
                 List<String> extensionExtraArgs = new ArrayList<>(extraArgs);
@@ -393,7 +393,14 @@ public class Main {
                 "-H:+AddAllCharsets", "-H:+IncludeAllLocales", "-H:IncludeResources=resourcepacks/.*", "-H:IncludeResources=.*.so",
                 "-H:IncludeResources=.*.dylib", "-H:IncludeResources=.*.dll", "-H:IncludeResources=.*.jnilib",
                 "-H:IncludeResources=data/.*", "-H:IncludeResources=assets/.*", "-H:+AddAllCharsets", "-H:+IncludeAllLocales",
-                "--initialize-at-run-time=io.netty,org.slf4j,sun.net.dns.ResolverConfigurationImpl", "-H:TempDirectory=tmp")) {
+                "--initialize-at-run-time=io.netty,org.slf4j,sun.net.dns.ResolverConfigurationImpl", "-Djava.awt.headless=true",
+                "--initialize-at-build-time=com.sun.jmx.mbeanserver.DefaultMXBeanMappingFactory$CompositeMapping," +
+                        "com.sun.jmx.mbeanserver.DefaultMXBeanMappingFactory$EnumMapping," +
+                        "com.sun.jmx.mbeanserver.DefaultMXBeanMappingFactory$ArrayMapping," +
+                        "com.sun.jmx.mbeanserver.DefaultMXBeanMappingFactory$CollectionMapping," +
+                        "com.sun.jmx.mbeanserver.DefaultMXBeanMappingFactory$TabularMapping",
+                "-H:TempDirectory=tmp"
+        )) {
             writer.write(" ");
             writer.write(arg);
         }

@@ -3,15 +3,11 @@ package me.judge.mcnativebuilder.internal.processors;
 import me.judge.mcnativebuilder.IProcessor;
 import me.judge.mcnativebuilder.LayerState;
 import org.angelauramc.judgelib.instance.Instance;
-import org.angelauramc.judgelib.util.ConnectionUtil;
 import org.angelauramc.judgelib.util.SemVer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -19,25 +15,21 @@ public class LWJGLProcessor implements IProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(LWJGLProcessor.class.getName());
     private static final String LWJGL_DOWNLOAD = "https://build.lwjgl.org/release/3.3.3/bin/";
     private boolean isFFMCapable;
+    private boolean requiresThreadLocalPatch = false;
 
     @Override
     public List<File> processClasspath(Instance install) {
-        try {
-            for (String file : install.classpath().split(File.pathSeparator)) {
-                if (file.contains("lwjgl")) {
-                    String pattern = Pattern.quote(File.separator);
-                    String[] paths = file.split(pattern);
-                    String newLWJGL = createLWJGL(paths[paths.length - 1]);
+        for (String file : install.classpath().split(File.pathSeparator)) {
+            if (file.contains("lwjgl")) {
+                String pattern = Pattern.quote(File.separator);
+                String[] paths = file.split(pattern);
+                String newLWJGL = createLWJGL(paths[paths.length - 1]);
 
-                    if(newLWJGL.equals(paths[paths.length - 1]))
-                        continue;
+                if(newLWJGL.equals(paths[paths.length - 1]))
+                    continue;
 
-                    LOGGER.debug("Replacing {} with 3.3.3 Version.\n", file);
-                    ConnectionUtil.downloadFile(URI.create(LWJGL_DOWNLOAD + newLWJGL), Path.of(file));
-                }
+                requiresThreadLocalPatch = true;
             }
-        } catch (IOException e) {
-            LOGGER.error("LWJGL Processing failed!", e);
         }
 
         return List.of();
@@ -48,6 +40,9 @@ public class LWJGLProcessor implements IProcessor {
         // Need to generate the method handles at build-time if LWJGL is ffm capable
         if(isFFMCapable && appLayer != LayerState.APP_LAYER)
             return List.of("--features=me.judge.lwjgl.LWJGL34Feature");
+
+        if(requiresThreadLocalPatch)
+            return List.of("-J-Dorg.lwjgl.version.notlwjgl333=true");
 
         return List.of();
     }
@@ -63,7 +58,7 @@ public class LWJGLProcessor implements IProcessor {
 
         boolean matchesLWJGLPattern = fileName.matches("lwjgl-3\\.([0-9])\\.([0-9]).*");
         boolean isNatives = fileName.contains("natives");
-        SemVer desired = new SemVer("3.3.3");
+        SemVer desired = new SemVer("3.3.4");
         SemVer ffmCapable = new SemVer("3.4.0");
 
         if (matchesLWJGLPattern) {

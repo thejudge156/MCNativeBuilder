@@ -39,6 +39,8 @@ public class FabricProcessor implements IProcessor {
             }
 
             for (MinecraftVersion.Library vanillaLibrary : vanillaVersion.libraries) {
+                if(vanillaLibrary.name.contains("lwjgl"))
+                    continue;
                 toRemove.add(classpath.stream().filter(f -> f.getAbsolutePath().contains(vanillaLibrary.downloads.artifact.path)).findFirst().orElse(null));
             }
             classpath.removeAll(toRemove);

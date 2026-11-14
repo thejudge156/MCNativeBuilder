@@ -13,9 +13,7 @@ import java.util.regex.Pattern;
 public class AndroidProcessor implements IProcessor {
     @Override
     public List<File> processClasspath(Instance install) {
-        File file = new File(Main.installDir, "lwjgl-glfw-classes.jar");
-        Util.extractResource("lwjgl-glfw-classes.jar", file);
-        return List.of(file);
+        return List.of();
     }
 
     @Override
@@ -23,17 +21,6 @@ public class AndroidProcessor implements IProcessor {
         if(System.getenv("ANDROID_NDK") == null) {
             // No NDK, skip
             return List.of();
-        }
-
-        for (String file : install.classpath().split(File.pathSeparator)) {
-            String[] paths = file.split(Pattern.quote(File.separator));
-            if(paths[paths.length - 1].contains("lwjgl") || paths[paths.length - 1].contains("lwjgl-")) {
-                try {
-                    Files.delete(Path.of(file));
-                } catch (IOException e) {
-                    // ignore, file was probably deleted
-                }
-            }
         }
 
         File capCacheFolder = new File(Main.buildDir, "caps");
